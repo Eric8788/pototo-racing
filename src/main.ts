@@ -58,7 +58,8 @@ let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
-let gyroEnabled=false,gyroSteer=0,gyroBaseline=0,gyroCalibrated=false;
+const mobileDevice=matchMedia('(pointer:coarse)').matches||innerWidth<760;
+let gyroEnabled=mobileDevice,gyroSteer=0,gyroBaseline=0,gyroCalibrated=false,gyroPermissionAsked=false;
 const gyroButton=$<HTMLButtonElement>('gyro-toggle');
 function setGyroLabel(){gyroButton.textContent=gyroEnabled?'手机倾斜：开':'手机倾斜：关';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));}
 function onOrientation(e:DeviceOrientationEvent){const angle=screen.orientation?.angle||0;const raw=angle===90?-(e.beta||0):angle===270?(e.beta||0):(e.gamma||0);if(!gyroCalibrated){gyroBaseline=raw;gyroCalibrated=true;}if(Math.abs(raw-gyroBaseline)<45)gyroSteer=THREE.MathUtils.clamp((raw-gyroBaseline)/18,-1,1);}
@@ -67,6 +68,8 @@ async function toggleGyro(){
  try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted')throw Error('permission');gyroCalibrated=false;gyroEnabled=true;window.addEventListener('deviceorientation',onOrientation);setGyroLabel();toast('保持当前姿势，倾斜手机控制左右，油门继续按 ↑');}
  catch{toast('没有获得陀螺仪权限，仍可用屏幕方向键。',2.5);}
 }
+async function ensureGyroPermission(){if(!mobileDevice||gyroPermissionAsked)return;gyroPermissionAsked=true;try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted'){gyroEnabled=false;setGyroLabel();return;}window.addEventListener('deviceorientation',onOrientation);setGyroLabel();}catch{gyroEnabled=false;setGyroLabel();}}
+if(mobileDevice){window.addEventListener('deviceorientation',onOrientation);document.addEventListener('pointerdown',()=>void ensureGyroPermission(),{once:true});}
 gyroButton.onclick=()=>void toggleGyro();setGyroLabel();
 const online=new OnlineGame({
  open:html=>{openModal(html);$('modal').classList.add('net-modal');},close:closeModal,
@@ -76,7 +79,7 @@ const online=new OnlineGame({
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
 onlineButton.onclick=()=>online.open();
-function controls():Control{return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse')?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake:keys.has('Space')||touch.has('brake'),boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
+function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=mobileDevice&&mode==='race'&&!reverse&&!brake;return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0)-(reverse?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
  context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
  init(){if(this.context)return;this.context=new AudioContext();this.engine=this.context.createOscillator();this.engine.type='triangle';this.engineGain=this.context.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(this.context.destination);this.engine.start();}
@@ -176,6 +179,7 @@ function updateCamera(dt:number){
   desiredTarget.set(vehicle.x,0,vehicle.z);desiredPosition.copy(desiredTarget).add(new THREE.Vector3(21,29,24));
  }else{
   const f=new THREE.Vector3(Math.sin(vehicle.heading),0,Math.cos(vehicle.heading));const side=new THREE.Vector3(f.z,0,-f.x);desiredTarget.set(vehicle.x,vehicle.y+.7,vehicle.z).addScaledVector(f,3);desiredPosition.set(vehicle.x,vehicle.y,vehicle.z).addScaledVector(f,-15.5).addScaledVector(side,6.5);desiredPosition.y+=15.0;
+  if(mobileDevice){desiredTarget.set(vehicle.x,vehicle.y+1.0,vehicle.z).addScaledVector(f,3.4);desiredPosition.set(vehicle.x,vehicle.y,vehicle.z).addScaledVector(f,-13.8);desiredPosition.y+=8.5;}
  }
  const lerp=1-Math.exp(-dt*(mode==='intro'?1.5:4));camera.position.lerp(desiredPosition,lerp);cameraTarget.lerp(desiredTarget,lerp);camera.lookAt(cameraTarget);const targetFov=mode==='intro'?42:innerWidth<760?(vehicle.boosting?66:60):(vehicle.boosting?52:46);camera.fov=THREE.MathUtils.damp(camera.fov,targetFov,4,dt);camera.updateProjectionMatrix();
 }
