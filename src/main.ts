@@ -22,7 +22,7 @@ document.querySelector('#app')!.innerHTML=`
  <section class="intro" id="intro"><div class="eyebrow"><span></span> SMALL CAR. BIG NONSENSE.</div><h1>正经赛车，<em>不太正经地开。</em></h1><p>欢迎来到土豆环岛。<br/>踩下油门，拐个歪弯，和路边的憨瓜打个招呼。<br/>这里只有你、风，以及一颗不服输的土豆。</p><button class="primary" id="start" disabled><span>正在把小车搬上岛…</span><b>↗</b></button><div class="intro-hint">3 圈小比赛 · 随时重来 · 不用驾照</div></section>
  <aside class="track-card"><span class="card-stamp">新手<br/>友好</span><div class="card-tag">TRACK 01 / THE FIRST LAP</div><h2>土豆环岛 🥔</h2><div class="card-meta"><span>晴，宜乱开</span><span>约 260 m</span><span>3 圈</span></div></aside>
  <div class="toast" id="toast" role="status" aria-live="polite"></div><div class="countdown" id="countdown" aria-live="assertive"></div><div class="drift-feedback" id="drift">NICE & WOBBLY!</div>
- <div class="touch-pad"><div class="touch-area"><button class="touch-control" data-control="left" aria-label="左转">‹</button><button class="touch-control" data-control="right" aria-label="右转">›</button></div><div class="touch-area"><button class="touch-control brake" data-control="brake" aria-label="刹车漂移">漂移</button><button class="touch-control boost" data-control="boost" aria-label="氮气加速">BOOST</button><button class="touch-control gas" data-control="gas" aria-label="加速">↑</button><button class="touch-control" data-control="reverse" aria-label="倒车">↓</button></div></div>
+ <div class="touch-pad"><div class="touch-area"><button class="touch-control" data-control="left" aria-label="左转">‹</button><button class="touch-control" data-control="right" aria-label="右转">›</button></div><div class="touch-area"><button class="touch-control brake" data-control="brake" aria-label="刹车漂移">漂移</button><button class="touch-control boost" data-control="boost" aria-label="氮气加速">BOOST</button><button class="touch-control gas" data-control="gas" aria-label="加速">↑</button><button class="touch-control" data-control="reverse" aria-label="倒车">↓</button></div><button id="gyro-toggle" class="gyro-toggle" type="button" aria-pressed="false">手机倾斜：关</button></div>
  <div class="bottom-row"><div class="minimap-wrap"><div class="map-title"><b>土豆环岛</b><span>01 / MAP</span></div><canvas id="minimap" width="300" height="228" aria-label="赛道小地图"></canvas><div class="map-caption"><span>你在这里</span><span>别迷路，瓜。</span></div></div><div class="controls"><div class="control"><kbd>WASD</kbd><span>/</span><kbd>↑↓←→</kbd><span>驾驶</span></div><div class="control"><kbd>SPACE</kbd><span>漂移</span></div><div class="control"><kbd>SHIFT</kbd><span>加速</span></div><div class="control honk-control"><kbd>H</kbd><span>叭叭</span></div><div class="control"><kbd>R</kbd><span>回正</span></div></div><div class="speedometer"><div class="speed-header"><span>APEX 07</span><i></i></div><div class="speed-main"><strong id="speed">0</strong><span>KM/H<br/>小心超萌</span></div><div class="boost-track"><i id="boost-bar"></i></div><div class="boost-label"><span>BOOST AVAILABLE</span><b id="boost-percent">100%</b></div></div></div>
  <div class="footer-note">BUILT FOR THE JOY OF DRIVING. NOT FOR YOUR DRIVING TEST.</div>
 </div>
@@ -58,6 +58,16 @@ let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
+let gyroEnabled=false,gyroSteer=0,gyroBaseline=0;
+const gyroButton=$<HTMLButtonElement>('gyro-toggle');
+function setGyroLabel(){gyroButton.textContent=gyroEnabled?'手机倾斜：开':'手机倾斜：关';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));}
+function onOrientation(e:DeviceOrientationEvent){const angle=screen.orientation?.angle||0;const raw=angle===90?-(e.beta||0):angle===270?(e.beta||0):(e.gamma||0);if(Math.abs(raw-gyroBaseline)<45)gyroSteer=THREE.MathUtils.clamp((raw-gyroBaseline)/18,-1,1);}
+async function toggleGyro(){
+ if(gyroEnabled){gyroEnabled=false;window.removeEventListener('deviceorientation',onOrientation);gyroSteer=0;setGyroLabel();return;}
+ try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted')throw Error('permission');gyroBaseline=screen.orientation?.angle===90?0:0;gyroEnabled=true;window.addEventListener('deviceorientation',onOrientation);setGyroLabel();toast('倾斜手机控制左右，油门继续按 ↑');}
+ catch{toast('没有获得陀螺仪权限，仍可用屏幕方向键。',2.5);}
+}
+gyroButton.onclick=()=>void toggleGyro();setGyroLabel();
 const online=new OnlineGame({
  open:html=>{openModal(html);$('modal').classList.add('net-modal');},close:closeModal,
  intro:()=>{mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');$('countdown').textContent='';competition.reset(selectedGameMode);document.querySelector('.leaderboard-title>span')!.textContent='POSITION';},
@@ -66,7 +76,7 @@ const online=new OnlineGame({
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
 onlineButton.onclick=()=>online.open();
-function controls():Control{return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse')?1:0),steer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake:keys.has('Space')||touch.has('brake'),boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
+function controls():Control{return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse')?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake:keys.has('Space')||touch.has('brake'),boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
  context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
  init(){if(this.context)return;this.context=new AudioContext();this.engine=this.context.createOscillator();this.engine.type='triangle';this.engineGain=this.context.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(this.context.destination);this.engine.start();}
