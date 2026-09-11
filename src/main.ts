@@ -49,7 +49,7 @@ const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,1,400);camera
 scene.add(new THREE.HemisphereLight(0xfff7df,0x729391,2.5));const sun=new THREE.DirectionalLight(0xffedcc,3.2);sun.position.set(-35,70,35);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-78,right:78,top:65,bottom:-65,near:1,far:170});sun.shadow.normalBias=.12;sun.shadow.bias=-.00008;sun.shadow.radius=3;scene.add(sun);
 const world=new World(scene),vehicle=new Vehicle(),race=new Race();
 const competition=new Competition(vehicle,race),rivalVisuals:RivalVisual[]=[];
-let selectedGameMode:GameMode='race';
+let selectedGameMode:GameMode='race';let garageNext:'race'|'online'='race';
 competition.reset(selectedGameMode);
 modePicker.addEventListener('change',()=>{
  selectedGameMode=modePicker.querySelector<HTMLInputElement>('input:checked')!.value as GameMode;
@@ -58,7 +58,7 @@ modePicker.addEventListener('change',()=>{
  updateCar(0);updateHUD();
 });
 const car=new THREE.Group(),carBody=new THREE.Group();car.add(carBody);scene.add(car);const playerModels=new Map<KartId,KartModel>();let playerModel:KartModel|undefined;let selectedKart:KartId='potato';let thumbnails=new Map<KartId,string>();
-let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false,countdown=3,lastCountdown=-1,coins=0,elapsedVisual=0,cameraMode:'follow'|'overview'='follow',toastTimer=0,coinSoundCooldown=0,padCooldown=0,respawnCooldown=0,accumulator=0,previousFrame=performance.now(),hudTick=0;
+let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false,countdown=3,lastCountdown=-1,coins=0,elapsedVisual=0,cameraMode:'follow'|'overview'='follow',toastTimer=0,coinSoundCooldown=0,padCooldown=0,respawnCooldown=0,accumulator=0,previousFrame=performance.now(),hudTick=0,finishRefresh:ReturnType<typeof setInterval>|undefined;
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
@@ -107,7 +107,7 @@ const online=new OnlineGame({
  select:selectKart,selected:()=>selectedKart,thumbnails:()=>thumbnails,toast,prepare:prepareSteering
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
-onlineButton.onclick=()=>prepareSteering(()=>online.open());
+onlineButton.onclick=()=>openGarage('online');
 function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=isMobileDevice()&&mode==='race'&&!reverse&&!brake;return {throttle:reverse?-1:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0),steer:gyroEnabled?tilt.value(performance.now()):(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
  context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
@@ -128,16 +128,24 @@ function selectKart(id:KartId){
  try{localStorage.setItem('wobble-gp:kart',id);}catch{}
  updateCar(0);updateHUD();
 }
-function openGarage(){
+function openGarage(next:'race'|'online'='race'){garageNext=next;
  if(!loaded)return;
- openModal(`<small>THE ODD GARAGE / 不正经车库</small><h2 id="modal-title">车不一定正经，快乐一定超标。</h2><p class="garage-subtitle">四个怪东西，同一颗赛车的心。挑一辆，其他三辆就是你的对手。</p><div class="garage-grid">${KARTS.map(k=>`<button class="kart-card" data-kart="${k.id}" aria-pressed="${selectedKart===k.id}"><span class="kart-number">0${KARTS.indexOf(k)+1}</span>${thumbnails.has(k.id)?`<img src="${thumbnails.get(k.id)}" alt="${k.name}三维模型预览">`:'<span class="no-preview">3D 座驾</span>'}<small>${k.english}</small><b>${k.name}</b><span class="kart-tagline">${k.tagline}</span><i class="kart-selected">已选择 ✓</i></button>`).join('')}</div><p id="kart-description" class="kart-description"></p><div class="garage-footer"><span>更小的车身 · 更大的撒野空间</span><button class="primary" id="garage-done">就开这辆，出发 ↗</button></div>`);
+ openModal(`<small>THE ODD GARAGE / 不正经车库</small><h2 id="modal-title">车不一定正经，快乐一定超标。</h2><p class="garage-subtitle">四个怪东西，同一颗赛车的心。挑一辆，其他三辆就是你的对手。</p><p class="garage-rotate-hint">拖动任意车卡，拨动查看 360° 模型</p><div class="garage-grid">${KARTS.map(k=>`<button class="kart-card" data-kart="${k.id}" aria-pressed="${selectedKart===k.id}"><span class="kart-number">0${KARTS.indexOf(k)+1}</span>${thumbnails.has(k.id)?`<img src="${thumbnails.get(k.id)}" alt="${k.name}三维模型预览">`:'<span class="no-preview">3D 座驾</span>'}<small>${k.english}</small><b>${k.name}</b><span class="kart-tagline">${k.tagline}</span><i class="kart-selected">已选择 ✓</i></button>`).join('')}</div><p id="kart-description" class="kart-description"></p><div class="garage-footer"><span>更小的车身 · 更大的撒野空间</span><button class="primary" id="garage-done">就开这辆，出发 ↗</button></div>`);
  $('modal').classList.add('garage-modal');
  const sync=()=>{for(const b of $('modal').querySelectorAll<HTMLButtonElement>('[data-kart]'))b.setAttribute('aria-pressed',String(b.dataset.kart===selectedKart));$('kart-description').textContent=KARTS.find(k=>k.id===selectedKart)!.description;};
- for(const b of $('modal').querySelectorAll<HTMLButtonElement>('[data-kart]'))b.onclick=()=>{selectKart(b.dataset.kart as KartId);sync();};
- sync();$('garage-done').onclick=closeModal;
+ for(const b of $('modal').querySelectorAll<HTMLButtonElement>('[data-kart]')){b.onclick=()=>{selectKart(b.dataset.kart as KartId);sync();};let down=false,last=0;b.addEventListener('pointerdown',e=>{down=true;last=e.clientX;b.setPointerCapture(e.pointerId);});b.addEventListener('pointermove',e=>{if(down){car.rotation.y+=(e.clientX-last)*.012;last=e.clientX;}});b.addEventListener('pointerup',()=>down=false);b.addEventListener('pointercancel',()=>down=false);}
+ sync();$('garage-done').onclick=()=>{closeModal();if(garageNext==='online')online.open();else startRace();};
+}
+function openMapSelect(){
+ if(!loaded)return;
+ openModal(`<small>TRACK SELECT / 选择赛道</small><h2 id="modal-title">先挑一块地，再挑一辆车。</h2><p>俯视看看赛道，左右切换地图。</p><div class="map-selector"><button class="map-arrow" id="map-prev">‹</button><div class="map-slide" id="map-slide"><canvas id="map-preview" width="420" height="260"></canvas><b id="map-name">土豆环岛</b><small id="map-meta">晴天 · 约 260 m · 3 圈</small></div><button class="map-arrow" id="map-next">›</button></div><div class="map-dots"><i class="active"></i><i></i><i></i></div><button class="primary" id="map-next-step">选好了，去车库 ↗</button><button class="secondary" id="map-cancel">返回</button>`);
+ const preview=$<HTMLCanvasElement>('map-preview'),c=preview.getContext('2d')!;let index=0;
+ const draw=()=>{c.clearRect(0,0,420,260);c.fillStyle='#dce8c0';c.fillRect(0,0,420,260);c.strokeStyle='#fff6dd';c.lineWidth=42;c.lineCap='round';c.beginPath();samples.forEach((p,i)=>{const x=p.x*3.4+210,y=p.z*2.6+130;i?c.lineTo(x,y):c.moveTo(x,y)});c.closePath();c.stroke();c.strokeStyle='#566f75';c.lineWidth=30;c.stroke();c.strokeStyle='#f6ca62';c.lineWidth=2;c.setLineDash([5,7]);c.stroke();c.setLineDash([]);$('map-name').textContent=['土豆环岛','铅笔峡谷','飞碟环线'][index];$('map-meta').textContent=['晴天 · 约 260 m · 3 圈','黄昏 · 跳台很多 · 3 圈','夜光 · 近道危险 · 3 圈'][index];document.querySelectorAll('.map-dots i').forEach((d,i)=>d.classList.toggle('active',i===index));};
+ const slide=(dir:number)=>{index=(index+dir+3)%3;$('map-slide').classList.remove('map-swipe');void $('map-slide').offsetWidth;$('map-slide').classList.add('map-swipe');draw();};
+ $('map-prev').onclick=()=>slide(-1);$('map-next').onclick=()=>slide(1);$('map-next-step').onclick=()=>openGarage();$('map-cancel').onclick=closeModal;draw();
 }
 function returnToGarage(){closeModal();mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');competition.reset(selectedGameMode);updateHUD();openGarage();}
-garageButton.onclick=openGarage;
+garageButton.onclick=()=>openGarage('race');
 function beginRace(){if(!loaded)return;closeModal();competition.reset(selectedGameMode);world.resetCoins();coins=0;mode='countdown';countdown=3;lastCountdown=-1;padCooldown=0;keys.clear();touch.clear();for(const s of skids)s.visible=false;for(const d of dust){d.life=0;d.mesh.visible=false;}$('intro').classList.add('hidden');$('intro').inert=true;$('hud').classList.remove('finished');$('hud').classList.add('playing');$('countdown').textContent='3';canvas.focus();toast(selectedGameMode==='race'?'四辆车，三圈路。土豆冠军只有一个！':'跟着箭头跑三圈。土豆评委已经就位。',3);updateHUD();}
 function startRace(){prepareSteering(beginRace);}
 function respawn(){if(online.active){online.net.send({type:'respawn'});keys.clear();touch.clear();return;}if(mode==='intro')return;vehicle.reset(race.respawnProgress());keys.clear();touch.clear();respawnCooldown=1;toast('稳住！把你捞回赛道了。');updateCar(0);}
@@ -145,13 +153,14 @@ function toggleCamera(){cameraMode=cameraMode==='follow'?'overview':'follow';$('
 function closeModal(){$('modal').classList.remove('garage-modal','net-modal');paused=false;$('modal-backdrop').classList.remove('visible');keys.clear();touch.clear();canvas.focus();}
 function openModal(content:string){paused=true;keys.clear();touch.clear();$('modal').innerHTML=content;$('modal-backdrop').classList.add('visible');$('modal').querySelector<HTMLButtonElement>('button')?.focus();}
 function help(){openModal(`<small>DRIVER'S VERY SHORT MANUAL</small><h2 id="modal-title">小车上手指南</h2><p>先跑起来。漂不漂亮，土豆说了算。</p><div class="help-row"><span>加速 / 刹车与倒车</span><span><kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd> <kbd>↓</kbd></span></div><div class="help-row"><span>方向</span><span><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></span></div><div class="help-row"><span>刹车 / 转弯时漂移</span><kbd>SPACE</kbd></div><div class="help-row"><span>氮气 / 回到检查点</span><span><kbd>SHIFT</kbd> / <kbd>R</kbd></span></div><div class="help-row"><span>镜头 / 声音 / 喇叭</span><span><kbd>C</kbd> <kbd>M</kbd> <kbd>H</kbd></span></div><p>黄色箭头会加速，跳台可以起飞。收集薯币补充氮气；草地会减速。顺序通过检查点才算一圈。</p><button class="primary" id="resume">知道了，继续开</button><button class="secondary" id="leave-race">结束本局，返回车库</button>`);$('resume').onclick=closeModal;$('leave-race').onclick=returnToGarage;}
-function finish(){mode='finished';$('hud').classList.add('finished');$('hud').classList.remove('playing');sound.tone(660,.3);setTimeout(()=>sound.tone(880,.4),130);openModal(`<small>FINISH! / 土豆认证完赛</small><h2 id="modal-title">${selectedGameMode==='race'?(competition.place===1?'冠军，薯你最歪！':`第 ${competition.place} 名，也很帅。`):'有点歪，但很帅。'}</h2><div class="results-time">${formatTime(race.elapsed)}</div>${selectedGameMode==='race'?`<ol class="results-ranking">${competition.standings().map(e=>`<li><span style="color:${e.color}">●</span> ${e.name}<strong>${e.race.finished?formatTime(e.race.elapsed):'尚未完赛'}</strong></li>`).join('')}</ol>`:''}<div class="lap-list">${race.lapTimes.map((t,i)=>`第 ${i+1} 圈 <strong style="float:right">${formatTime(t)}</strong>`).join('<br/>')}</div><p>捡到 ${coins} 枚薯币 · 最佳单圈 ${formatTime(race.best)}</p><button id="again" class="primary">再跑一次 ↗</button><button id="back-home" class="secondary">回到小岛</button>`);$('again').onclick=startRace;$('back-home').onclick=()=>{closeModal();mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');competition.reset(selectedGameMode);updateHUD();};}
+function finish(){mode='finished';$('hud').classList.add('finished');$('hud').classList.remove('playing');sound.tone(660,.3);setTimeout(()=>sound.tone(880,.4),130);openModal(`<small>FINISH! / 土豆认证完赛</small><h2 id="modal-title">${selectedGameMode==='race'?(competition.place===1?'冠军，薯你最歪！':`第 ${competition.place} 名，也很帅。`):'有点歪，但很帅。'}</h2><div class="results-time">${formatTime(race.elapsed)}</div>${selectedGameMode==='race'?`<ol class="results-ranking" id="local-results">${competition.standings().map(e=>`<li><span style="color:${e.color}">●</span> ${e.name}<strong>${e.race.finished?formatTime(e.race.elapsed):'尚未完赛'}</strong></li>`).join('')}</ol>`:''}<div class="lap-list">${race.lapTimes.map((t,i)=>`第 ${i+1} 圈 <strong style="float:right">${formatTime(t)}</strong>`).join('<br/>')}</div><p>捡到 ${coins} 枚薯币 · 最佳单圈 ${formatTime(race.best)}</p><button id="again" class="primary">再跑一次 ↗</button><button id="back-home" class="secondary">回到小岛</button>`);$('again').onclick=startRace;$('back-home').onclick=()=>{if(finishRefresh)clearInterval(finishRefresh);closeModal();mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');competition.reset(selectedGameMode);updateHUD();};
+ if(selectedGameMode==='race'){finishRefresh=setInterval(()=>{const list=document.getElementById('local-results');if(!list)return;list.innerHTML=competition.standings().map(e=>`<li><span style="color:${e.color}">●</span> ${e.name}<strong>${e.race.finished?formatTime(e.race.elapsed):'比赛中'}</strong></li>`).join('');if(competition.rivals.every(r=>r.race.finished)){clearInterval(finishRefresh);finishRefresh=undefined;}},200);}}
 function showHelp(){
  if(online.active&&(online.net.state?.phase==='lobby'||online.me?.race.finished||online.me?.dnf||online.net.state?.phase==='results'))return;
  help();
  if(online.active){$('modal-title').textContent='联机菜单 · 比赛继续';$('modal').querySelector('p')!.textContent='已松开你的油门，其他车手仍在比赛。';$('leave-race').textContent='退出本局联机';$('leave-race').onclick=()=>online.exit();online.net.send({type:'input',input:emptyInput});}
 }
-$('start').onclick=startRace;$('sound').onclick=()=>sound.toggle();$('camera').onclick=toggleCamera;$('reset').onclick=respawn;$('help').onclick=showHelp;
+$('start').onclick=openMapSelect;$('sound').onclick=()=>sound.toggle();$('camera').onclick=toggleCamera;$('reset').onclick=respawn;$('help').onclick=showHelp;
 window.addEventListener('keydown',e=>{
  if((e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&e.code!=='Escape')return;
  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)&&!(e.target instanceof HTMLButtonElement))e.preventDefault();
@@ -179,6 +188,7 @@ function step(dt:number,override?:Control){
  if(online.active){elapsedVisual+=dt;online.frame(dt);world.update(0,elapsedVisual);return;}
  elapsedVisual+=dt;coinSoundCooldown-=dt;padCooldown-=dt;respawnCooldown-=dt;
  if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('show');}
+ if(mode==='finished'&&selectedGameMode==='race'){competition.step(dt,world.obstacles,world.boosts);world.update(dt,elapsedVisual);return;}
  if(!paused){
   if(mode==='countdown'){countdown-=dt;const n=Math.ceil(countdown);if(n!==lastCountdown){lastCountdown=n;$('countdown').textContent=n>0?String(n):'GO!';sound.tone(n>0?440:880,.13);}if(countdown<=0){mode='race';setTimeout(()=>{$('countdown').textContent='';},650);}}
   if(mode==='race'){
