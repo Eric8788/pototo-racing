@@ -10,6 +10,7 @@ import {Competition,type GameMode} from './competition';
 import {RivalVisual} from './rival-visual';
 import {KARTS,createKart,animateKart,kartThumbnails,type KartId,type KartModel} from './kart-models';
 import {OnlineGame} from './online-game';
+import {TiltSteering} from './tilt-steering';
 
 const icons={sound:'<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M15 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',muted:'<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="m16 9 5 6m0-6-5 6"/>',camera:'<path d="M4 7h4l2-3h4l2 3h4v13H4Z"/><circle cx="12" cy="13" r="3"/>',reset:'<path d="M5 9a8 8 0 1 1 0 8M5 3v6h6"/>',help:'<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 3v.1"/>'};
 const svg=(key:keyof typeof icons)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${icons[key]}</svg>`;
@@ -60,18 +61,43 @@ const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
 const isMobileDevice=()=>matchMedia('(pointer:coarse)').matches||innerWidth<760;
 const mobileDevice=isMobileDevice();
-let gyroEnabled=mobileDevice,gyroSteer=0,gyroBaseline=0,gyroCalibrated=false,gyroPermissionAsked=false;
+let gyroEnabled=false,steeringSetupOpen=false;
+const tilt=new TiltSteering();
 const gyroButton=$<HTMLButtonElement>('gyro-toggle');
-function setGyroLabel(){gyroButton.textContent=gyroEnabled?'手机倾斜：开':'手机倾斜：关';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));}
-function onOrientation(e:DeviceOrientationEvent){const angle=screen.orientation?.angle||0;const raw=angle===90?-(e.beta||0):angle===270?(e.beta||0):(e.gamma||0);if(!gyroCalibrated){gyroBaseline=raw;gyroCalibrated=true;}if(Math.abs(raw-gyroBaseline)<45)gyroSteer=THREE.MathUtils.clamp((raw-gyroBaseline)/18,-1,1);}
-async function toggleGyro(){
- if(gyroEnabled){gyroEnabled=false;window.removeEventListener('deviceorientation',onOrientation);gyroSteer=0;gyroCalibrated=false;setGyroLabel();return;}
- try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted')throw Error('permission');gyroCalibrated=false;gyroEnabled=true;window.addEventListener('deviceorientation',onOrientation);setGyroLabel();toast('保持当前姿势，倾斜手机控制左右，油门继续按 ↑');}
- catch{toast('没有获得陀螺仪权限，仍可用屏幕方向键。',2.5);}
+function setGyroLabel(){gyroButton.textContent=gyroEnabled?'倾斜转向 · 校准':'方向键 · 改用倾斜';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));document.body.classList.toggle('tilt-active',gyroEnabled);}
+function onOrientation(e:DeviceOrientationEvent){const legacy=(window as unknown as {orientation?:number}).orientation;tilt.sample(e.beta,e.gamma,screen.orientation?.angle??legacy??0,performance.now());}
+function disableGyro(){gyroEnabled=false;tilt.reset();window.removeEventListener('deviceorientation',onOrientation);setGyroLabel();}
+function prepareSteering(proceed:()=>void){
+ if(!isMobileDevice()){proceed();return;}
+ if(steeringSetupOpen)return;steeringSetupOpen=true;
+ openModal(`<small>READY TO STEER / 开局前准备</small><h2 id="modal-title">先把方向调正。</h2><p>允许使用手机方向传感器，然后按驾驶时的姿势握稳手机。平放也可以；当前姿势会设为直行。</p><button class="primary" id="tilt-allow">${gyroEnabled?'重新校准当前姿势':'允许倾斜控制并校准'}</button><p id="tilt-status" role="status">授权并校准完成前，不会开始比赛或自动前进。</p><div class="tilt-preview" aria-label="转向预览"><span>左</span><i id="tilt-indicator"></i><span>右</span></div><button class="primary" id="tilt-go" disabled>校准后继续</button><button class="secondary" id="tilt-touch">改用方向键继续</button>`);
+ const allow=$<HTMLButtonElement>('tilt-allow'),go=$<HTMLButtonElement>('tilt-go');
+ let timer:ReturnType<typeof setInterval>|undefined,request=0;
+ const finishSetup=(touchMode:boolean)=>{request++;if(timer)clearInterval(timer);if(touchMode)disableGyro();steeringSetupOpen=false;closeModal();proceed();};
+ $('tilt-touch').onclick=()=>finishSetup(true);
+ go.onclick=()=>{if(tilt.calibrated&&tilt.fresh(performance.now()))finishSetup(false);};
+ allow.onclick=async()=>{
+  const attempt=++request;if(timer)clearInterval(timer);allow.disabled=true;go.disabled=true;tilt.reset();
+  try{
+   if(!window.isSecureContext||typeof DeviceOrientationEvent==='undefined')throw Error('当前浏览器无法读取传感器，请使用 HTTPS 页面或方向键。');
+   const sensor=DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>};
+   // Called directly from this button's click, as required by iOS.
+   if(sensor.requestPermission&&await sensor.requestPermission()!=='granted')throw Error('未获得传感器权限。你可以用方向键开始。');
+   if(attempt!==request)return;
+   gyroEnabled=true;setGyroLabel();window.addEventListener('deviceorientation',onOrientation);
+   $('tilt-status').textContent='保持手机稳定约 1 秒，正在校准…';
+   const began=performance.now();timer=setInterval(()=>{
+    const now=performance.now(),ready=tilt.calibrated&&tilt.fresh(now);go.disabled=!ready;
+    go.textContent=ready?'方向正确，继续 ↗':'校准后继续';
+    $('tilt-indicator').style.transform=`translateX(${tilt.value(now)*90}px)`;
+    $('tilt-status').textContent=ready?'已校准。左右倾斜试试，回到当前姿势应为直行。':'保持手机稳定约 1 秒，正在校准…';
+    if(!ready&&now-began>8000){clearInterval(timer);disableGyro();$('tilt-status').textContent='未收到稳定的传感器读数。请重试，或改用方向键。';allow.disabled=false;}
+   },80);
+   allow.disabled=false;allow.textContent='重新校准当前姿势';
+  }catch(e){if(attempt!==request)return;disableGyro();$('tilt-status').textContent=(e as Error).message;allow.disabled=false;}
+ };
 }
-async function ensureGyroPermission(){if(!mobileDevice||gyroPermissionAsked)return;gyroPermissionAsked=true;try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted'){gyroEnabled=false;setGyroLabel();return;}window.addEventListener('deviceorientation',onOrientation);setGyroLabel();}catch{gyroEnabled=false;setGyroLabel();}}
-if(mobileDevice){window.addEventListener('deviceorientation',onOrientation);document.addEventListener('pointerdown',()=>void ensureGyroPermission(),{once:true});}
-gyroButton.onclick=()=>void toggleGyro();setGyroLabel();
+gyroButton.onclick=()=>prepareSteering(()=>{});setGyroLabel();
 const online=new OnlineGame({
  open:html=>{openModal(html);$('modal').classList.add('net-modal');},close:closeModal,
  intro:()=>{mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');$('countdown').textContent='';competition.reset(selectedGameMode);document.querySelector('.leaderboard-title>span')!.textContent='POSITION';},
@@ -79,8 +105,8 @@ const online=new OnlineGame({
  select:selectKart,selected:()=>selectedKart,thumbnails:()=>thumbnails,toast
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
-onlineButton.onclick=()=>online.open();
-function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=isMobileDevice()&&mode==='race'&&!reverse&&!brake;return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0)-(reverse?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
+onlineButton.onclick=()=>prepareSteering(()=>online.open());
+function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=isMobileDevice()&&mode==='race'&&!reverse&&!brake;return {throttle:reverse?-1:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0),steer:gyroEnabled?tilt.value(performance.now()):(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
  context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
  init(){if(this.context)return;this.context=new AudioContext();this.engine=this.context.createOscillator();this.engine.type='triangle';this.engineGain=this.context.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(this.context.destination);this.engine.start();}
@@ -110,7 +136,8 @@ function openGarage(){
 }
 function returnToGarage(){closeModal();mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');competition.reset(selectedGameMode);updateHUD();openGarage();}
 garageButton.onclick=openGarage;
-function startRace(){if(!loaded)return;closeModal();competition.reset(selectedGameMode);world.resetCoins();coins=0;mode='countdown';countdown=3;lastCountdown=-1;padCooldown=0;keys.clear();touch.clear();for(const s of skids)s.visible=false;for(const d of dust){d.life=0;d.mesh.visible=false;}$('intro').classList.add('hidden');$('intro').inert=true;$('hud').classList.remove('finished');$('hud').classList.add('playing');$('countdown').textContent='3';canvas.focus();toast(selectedGameMode==='race'?'四辆车，三圈路。土豆冠军只有一个！':'跟着箭头跑三圈。土豆评委已经就位。',3);updateHUD();}
+function beginRace(){if(!loaded)return;closeModal();competition.reset(selectedGameMode);world.resetCoins();coins=0;mode='countdown';countdown=3;lastCountdown=-1;padCooldown=0;keys.clear();touch.clear();for(const s of skids)s.visible=false;for(const d of dust){d.life=0;d.mesh.visible=false;}$('intro').classList.add('hidden');$('intro').inert=true;$('hud').classList.remove('finished');$('hud').classList.add('playing');$('countdown').textContent='3';canvas.focus();toast(selectedGameMode==='race'?'四辆车，三圈路。土豆冠军只有一个！':'跟着箭头跑三圈。土豆评委已经就位。',3);updateHUD();}
+function startRace(){prepareSteering(beginRace);}
 function respawn(){if(online.active){online.net.send({type:'respawn'});keys.clear();touch.clear();return;}if(mode==='intro')return;vehicle.reset(race.respawnProgress());keys.clear();touch.clear();respawnCooldown=1;toast('稳住！把你捞回赛道了。');updateCar(0);}
 function toggleCamera(){cameraMode=cameraMode==='follow'?'overview':'follow';$('camera').setAttribute('aria-label',cameraMode==='follow'?'切换俯瞰镜头':'切换跟车镜头');toast(cameraMode==='follow'?'跟车镜头 · 贴着小车跑':'俯瞰镜头 · 看得更远');}
 function closeModal(){$('modal').classList.remove('garage-modal','net-modal');paused=false;$('modal-backdrop').classList.remove('visible');keys.clear();touch.clear();canvas.focus();}
