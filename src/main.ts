@@ -31,6 +31,8 @@ document.querySelector('#app')!.innerHTML=`
 <div id="modal-backdrop" class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" id="modal"></section></div>`;
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=$<HTMLCanvasElement>('scene');
+// Define device detection before renderer setup; this function is used immediately below.
+const isMobileDevice=()=>matchMedia('(pointer:coarse)').matches||innerWidth<760;
 const modePicker=document.createElement('fieldset');modePicker.className='mode-picker';modePicker.innerHTML='<legend>比赛模式</legend><label><input type="radio" name="game-mode" value="race" checked><span>四车大奖赛</span></label><label><input type="radio" name="game-mode" value="practice"><span>单车练习</span></label>';
 $('start').before(modePicker);
 const garageButton=document.createElement('button');garageButton.id='garage-open';garageButton.className='garage-open';garageButton.disabled=true;garageButton.innerHTML='<span>准备你的怪车…</span>';modePicker.before(garageButton);
@@ -60,7 +62,6 @@ let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
-const isMobileDevice=()=>matchMedia('(pointer:coarse)').matches||innerWidth<760;
 const mobileDevice=isMobileDevice();
 let gyroEnabled=false,steeringSetupOpen=false;
 const tilt=new TiltSteering();
