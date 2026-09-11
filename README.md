@@ -34,6 +34,16 @@ npm start
 
 房间最多 4 位真人，不用 AI 补位。允许朋友选择同款车，车顶用名字区分。比赛中打开菜单只松开自己的油门，不暂停全场。掉线者记为退出 / 未完赛，房主掉线自动转交下一位在线玩家；当前不支持断线恢复本局，只能等候场重新加入。比赛期间不接受中途加入，每局最多 10 分钟。
 
+## 部署到公网
+
+当前联机代码是一个长连接 Node.js WebSocket 服务，前端静态页面和 `/ws` 必须从同一个服务提供。最省改动的免费方案是 **Render Free 单服务**：它执行 `npm ci && npm run build`，再执行 `npm start`；仓库已经附带 `render.yaml`。Render 免费实例会在无访问时休眠，第一次打开可能需要几十秒唤醒，适合朋友小范围试玩，不适合承诺全天在线。
+
+你已有 Cloudflare 账户时，建议把 `race.ericproject.xyz` 作为游戏域名：在 Render 创建服务后，把该域名添加到 Render，Render 会给出验证用 CNAME；在 Cloudflare DNS 创建对应 CNAME 并打开代理（橙色云）。Cloudflare 会代理网页和 WebSocket，域名证书由 Render/Cloudflare 自动处理。NameSilo 只负责注册商；若域名 DNS 仍在 NameSilo，先把域名的 Nameserver 换成 Cloudflare 分配的两个 Nameserver，再在 Cloudflare 管理 DNS。不要删除现有 `@`、`www`、`hajimi` 等记录，新增 `race` 子域名即可。
+
+Vercel 适合纯前端静态部署，不能直接承载当前 `/ws` 长连接；Cloudflare Pages 也只能承载前端。把前端放 Vercel、联机服务放 Render 会增加跨域、两个域名和 WebSocket 地址配置，当前版本没有必要。后续若要完全 Cloudflare 化，需要把 `server/room.ts` 改写为 Durable Objects，并单独处理房间持久化、限流、连接恢复和观测，代码量和测试面都会明显增加。
+
+公网部署前请把 Render 服务的 `plan` 从 Free 升级或接受休眠限制，设置服务日志和健康检查；房间状态目前只在内存中，服务重启会清空房间，未提供账号、匹配、断线恢复或反作弊系统。
+
 ## 已实现
 
 - 单车练习 / 四车大奖赛切换，其他三款怪车自动组成 AI 对手阵容。
