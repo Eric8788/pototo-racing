@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import {getTrack} from './track';
+import {trackSpec} from './tracks';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {frameAt,ribbon,TRACK_WIDTH,nearestTrack,ramp,type Obstacle} from './track';
 const C={grass:0xc5cc91,sand:0xf3ddad,road:0x566f75,ivory:0xfff6dd,ink:0x263f40,coral:0xf48368,yellow:0xf6ca62,teal:0x408b80,leaf:0x85a877,purple:0xa3a2bc};
 const mats=new Map<number,THREE.MeshStandardMaterial>();
-function mat(c:number){if(!mats.has(c))mats.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.82}));return mats.get(c)!;}
+function mat(c:number){c=(trackSpec(getTrack()).colors as Record<number,number>)[c]??c;if(!mats.has(c))mats.set(c,new THREE.MeshStandardMaterial({color:c,roughness:.82}));return mats.get(c)!;}
 function mesh(g:THREE.BufferGeometry,c:number,parent:THREE.Object3D,x=0,y=0,z=0){const m=new THREE.Mesh(g,mat(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
 function box(p:THREE.Object3D,c:number,x:number,y:number,z:number,w:number,h:number,d:number,r=.12){return mesh(r?new RoundedBoxGeometry(w,h,d,2,r):new THREE.BoxGeometry(w,h,d),c,p,x,y,z);}
 function sphere(p:THREE.Object3D,c:number,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=mesh(new THREE.SphereGeometry(1,14,10),c,p,x,y,z);m.scale.set(sx,sy,sz);return m;}
@@ -25,7 +27,7 @@ export class World {
   seed=9307;
   scene.add(this.group);const p=this.group;
   // A thick toy island, floating in a mint-blue sea.
-  const ocean=mesh(new THREE.PlaneGeometry(1800,1800),0xc1dcdb,p,0,-3.5,0);ocean.rotation.x=-Math.PI/2;ocean.castShadow=false;
+  const ocean=mesh(new THREE.PlaneGeometry(1800,1800),0xc1dcdb,p,0,-3.5,0);ocean.name='Ocean';ocean.rotation.x=-Math.PI/2;ocean.castShadow=false;
   const island=cylinder(p,C.sand,0,-1.65,0,1,3.2,1,96);island.scale.set(64,1,49);
   const grass=cylinder(p,C.grass,0,-.10,0,1,.2,1,96);grass.scale.set(61.8,1,47.2);
   mesh(ribbon(-TRACK_WIDTH/2-.6,TRACK_WIDTH/2+.6,.055),C.ivory,p).castShadow=false;
@@ -84,7 +86,7 @@ export class World {
   this.group.updateMatrixWorld(true);
   const moving=new Set<THREE.Object3D>([this.gantry,...this.mascots,...this.coins.map(c=>c.object),...this.obstacles.filter(o=>o.movable).map(o=>o.object)]);
   const batches=new Map<string,{material:THREE.Material;shadow:boolean;receive:boolean;meshes:THREE.Mesh[]}>();
-  this.group.traverse(o=>{if(!(o instanceof THREE.Mesh)||Array.isArray(o.material))return;let ancestor:THREE.Object3D|null=o;while(ancestor){if(moving.has(ancestor))return;ancestor=ancestor.parent;}const key=o.material.uuid+o.castShadow+o.receiveShadow;let batch=batches.get(key);if(!batch){batch={material:o.material,shadow:o.castShadow,receive:o.receiveShadow,meshes:[]};batches.set(key,batch);}batch.meshes.push(o);});
+  this.group.traverse(o=>{if(!(o instanceof THREE.Mesh)||Array.isArray(o.material)||o.name==='Ocean')return;let ancestor:THREE.Object3D|null=o;while(ancestor){if(moving.has(ancestor))return;ancestor=ancestor.parent;}const key=o.material.uuid+o.castShadow+o.receiveShadow;let batch=batches.get(key);if(!batch){batch={material:o.material,shadow:o.castShadow,receive:o.receiveShadow,meshes:[]};batches.set(key,batch);}batch.meshes.push(o);});
   for(const b of batches.values()){if(b.meshes.length<2)continue;const geometries=b.meshes.map(m=>{let g=m.geometry.clone();if(g.index)g=g.toNonIndexed();g.applyMatrix4(m.matrixWorld);if(!g.getAttribute("uv"))g.setAttribute("uv",new THREE.BufferAttribute(new Float32Array(g.getAttribute("position").count*2),2));return g;});const merged=mergeGeometries(geometries,false);if(!merged)continue;const m=new THREE.Mesh(merged,b.material);m.castShadow=b.shadow;m.receiveShadow=b.receive;m.name="Static scenery batch";this.group.add(m);for(const old of b.meshes)old.removeFromParent();for(const g of geometries)g.dispose();}
  }
  tree(x:number,z:number,s:number){const g=new THREE.Group();g.position.set(x,0,z);g.scale.setScalar(s);this.group.add(g);cylinder(g,0x998963,0,1.1,0,.24,2.2);sphere(g,C.leaf,0,3.2,0,1.6,2.1,1.4);sphere(g,0xa9bf88,.8,2.8,.2,1.0,1.5,1.1);this.obstacles.push({x,z,radius:.65*s,object:g});}

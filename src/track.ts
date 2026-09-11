@@ -1,10 +1,21 @@
 import * as THREE from 'three';
+import {trackSpec,type TrackId} from './tracks';
 
 export const TRACK_WIDTH = 10.5;
-export const TRACK_POINTS = [[0,31],[27,30],[44,14],[39,-12],[25,-29],[-1,-30],[-19,-25],[-38,-12],[-41,10],[-25,28]];
-export const curve = new THREE.CatmullRomCurve3(TRACK_POINTS.map(([x,z])=>new THREE.Vector3(x,0,z)),true,'centripetal');
-export const trackLength = curve.getLength();
-export const samples = Array.from({length:400},(_,i)=>curve.getPointAt(i/400));
+let activeTrack:TrackId='potato';
+export const getTrack=()=>activeTrack;
+const buildCurve=(id:TrackId)=>new THREE.CatmullRomCurve3(trackSpec(id).points.map(([x,z])=>new THREE.Vector3(x,0,z)),true,'centripetal');
+export let curve=buildCurve(activeTrack);
+export let trackLength=curve.getLength();
+export let samples=Array.from({length:400},(_,i)=>curve.getPointAt(i/400));
+// Physics calls are synchronous. Rooms activate their own cached course before simulation.
+const cache=new Map<TrackId,{curve:THREE.CatmullRomCurve3;length:number;samples:THREE.Vector3[]}>();
+export function setTrack(id:TrackId){
+ if(id===activeTrack)return;
+ if(!cache.has(id)){const c=buildCurve(id);cache.set(id,{curve:c,length:c.getLength(),samples:Array.from({length:400},(_,i)=>c.getPointAt(i/400))});}
+ const data=cache.get(id)!;activeTrack=id;curve=data.curve;trackLength=data.length;samples=data.samples;
+ rampFrame=frameAt(.31);Object.assign(ramp,{x:rampFrame.position.x,z:rampFrame.position.z,heading:rampFrame.heading});
+}
 export function frameAt(t:number) {
   const position=curve.getPointAt(((t%1)+1)%1);
   const tangent=curve.getTangentAt(((t%1)+1)%1).normalize();
@@ -27,7 +38,7 @@ export function ribbon(inner:number,outer:number,height:number) {
 }
 export interface Obstacle {x:number;z:number;radius:number;object:THREE.Object3D; movable?:boolean;vx?:number;vz?:number;}
 export interface Ramp {x:number;z:number;heading:number;length:number;width:number;height:number;}
-export const rampFrame=frameAt(.31);
+export let rampFrame=frameAt(.31);
 export const ramp:Ramp={x:rampFrame.position.x,z:rampFrame.position.z,heading:rampFrame.heading,length:7,width:4.7,height:1.35};
 export function groundHeight(x:number,z:number) {
  const dx=x-ramp.x,dz=z-ramp.z;

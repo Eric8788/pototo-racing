@@ -1,3 +1,4 @@
+import {isTrackId} from '../src/tracks';
 import {createServer} from 'node:http';
 import {readFile,stat} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
@@ -11,7 +12,7 @@ import type {KartId} from '../src/kart-models';
 const port=Number(process.env.PORT||4173),dist=resolve('dist');
 const rooms=new Map<string,Room>();
 const lanUrls=()=>Object.entries(networkInterfaces()).sort(([a],[b])=>Number(b==='en0')-Number(a==='en0')).flatMap(([,list])=>(list||[]).filter(n=>n.family==='IPv4'&&!n.internal&&/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(n.address)).map(n=>`http://${n.address}:${port}`));
-const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.ttf':'font/ttf','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon','.json':'application/json'};
+const mime:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.glb':'model/gltf-binary','.ttf':'font/ttf','.webp':'image/webp','.png':'image/png','.svg':'image/svg+xml','.ico':'image/x-icon','.json':'application/json'};
 const server=createServer(async(req,res)=>{
  try{
   const pathname=decodeURIComponent(new URL(req.url||'/', 'http://localhost').pathname);
@@ -20,7 +21,7 @@ const server=createServer(async(req,res)=>{
   const path=resolve(dist,'.'+(pathname==='/'?'/index.html':pathname));
   if(!path.startsWith(dist+sep)){res.writeHead(403);res.end();return;}
   const info=await stat(path);if(!info.isFile())throw Error('Not a file');
-  const ext=extname(path),cache=pathname.startsWith('/assets/')?'public, max-age=31536000, immutable':'no-cache';
+  const ext=extname(path),cache=/\/assets\/[^/]+-[\w-]{8}\.(js|css)$/.test(pathname)?'public, max-age=31536000, immutable':'no-cache';
   res.writeHead(200,{'Content-Type':mime[ext]||'application/octet-stream','Content-Length':info.size,'Cache-Control':cache});
   res.end(req.method==='HEAD'?undefined:await readFile(path));
  }catch{res.writeHead(404);res.end('Not found');}
@@ -48,7 +49,7 @@ wss.on('connection',ws=>{
     let room:Room|undefined;
     if(m.type==='create'){
      if(rooms.size>=12)throw Error('房间数量已满，请稍后再试。');
-     let code='';do{code=String(randomInt(100000,1000000));}while(rooms.has(code));room=new Room(code,p.id);
+     let code='';do{code=String(randomInt(100000,1000000));}while(rooms.has(code));room=new Room(code,p.id,isTrackId(m.trackId)?m.trackId:'potato');
     }else{room=rooms.get(String(m.code).trim());if(!room)throw Error('找不到这个房间，请检查 6 位房间码。');}
     room.add(p.id,name||'无名小瓜',kart as KartId);rooms.set(room.code,room);p.room=room;broadcast(room);return;
    }

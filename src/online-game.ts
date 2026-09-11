@@ -1,3 +1,4 @@
+import {trackSpec,type TrackId} from './tracks';
 import * as THREE from 'three';
 import {Network} from './network';
 import {KARTS,type KartId} from './kart-models';
@@ -13,7 +14,7 @@ interface UI {
  open:(html:string)=>void;close:()=>void;intro:()=>void;
  phase:(phase:'countdown'|'race'|'finished')=>void;
  select:(id:KartId)=>void;selected:()=>KartId;thumbnails:()=>Map<KartId,string>;
- toast:(message:string)=>void;
+ track:()=>TrackId;selectTrack:(id:TrackId)=>void;toast:(message:string)=>void;
  prepare:(proceed:()=>void)=>void;
 }
 export class OnlineGame {
@@ -23,25 +24,27 @@ export class OnlineGame {
   this.net.onError=message=>{const el=document.getElementById('net-error');if(el)el.textContent=message;else ui.toast(message);};
   this.net.onClose=()=>{this.exit();ui.open('<small>CONNECTION LOST</small><h2 id="modal-title">和主机走散了</h2><p>本局已退出。确认主机服务和 Wi-Fi 后，可重新进入房间参加下一局。</p><button class="primary" id="net-dismiss">返回小岛</button>');$('net-dismiss').onclick=ui.close;};
  }
+ setWorld(world:World){this.world=world;}
  get active(){return !!this.net.state;}
  get me(){return this.net.state?.players.find(p=>p.id===this.net.id);}
  open(){
   if(this.active){this.lobby(this.net.state!);return;}
   let name='';try{name=localStorage.getItem('wobble-gp:name')||'';}catch{}
   const invited=new URLSearchParams(location.search).get('room')||'';
-  this.ui.open(`<small>LAN PARTY / 局域网开黑</small><h2 id="modal-title">今天，和真人一起歪。</h2><p>2–4 人同场。朋友用同一 Wi-Fi 打开本页，再输入房间码加入。</p><label class="net-label" for="net-name">你的称呼</label><input class="net-input" id="net-name" maxlength="12" value="${escape(name)}" placeholder="给自己起个歪名"><div class="net-actions"><button class="primary" id="net-create">创建房间 ↗</button><span>或者，加入朋友</span><label class="net-label" for="net-code">6 位房间码</label><input class="net-input" id="net-code" maxlength="6" inputmode="numeric" value="${escape(invited.slice(0,6))}" placeholder="例如 123456"><button class="secondary" id="net-join">加入房间</button></div><p id="net-error" role="status" class="net-error"></p><button class="secondary" id="net-cancel">返回小岛</button>`);
+  this.ui.open(`<small>ONLINE PARTY / 真人同场</small><h2 id="modal-title">今天，和真人一起歪。</h2><p>2–4 人同场。把邀请链接发给朋友，输入房间码就能加入。</p><label class="net-label" for="net-name">你的称呼</label><input class="net-input" id="net-name" maxlength="12" value="${escape(name)}" placeholder="给自己起个歪名"><div class="net-actions"><button class="primary" id="net-create">创建房间 ↗</button><span>或者，加入朋友</span><label class="net-label" for="net-code">6 位房间码</label><input class="net-input" id="net-code" maxlength="6" inputmode="numeric" value="${escape(invited.slice(0,6))}" placeholder="例如 123456"><button class="secondary" id="net-join">加入房间</button></div><p id="net-error" role="status" class="net-error"></p><button class="secondary" id="net-cancel">返回小岛</button>`);
   const connect=async(join:boolean)=>{
    const name=($('net-name') as HTMLInputElement).value.trim()||'无名小瓜',code=($('net-code') as HTMLInputElement).value.trim();
    if(join&&!/^\d{6}$/.test(code)){$('net-error').textContent='请输入完整的 6 位房间码。';return;}
    const buttons=['net-create','net-join'].map(id=>$(id) as HTMLButtonElement);buttons.forEach(b=>b.disabled=true);$('net-error').textContent='正在连接主机…';
-   try{await this.net.connect();try{localStorage.setItem('wobble-gp:name',name);}catch{}this.net.send(join?{type:'join',code,name,kart:this.ui.selected()}:{type:'create',name,kart:this.ui.selected()});}
+   try{await this.net.connect();try{localStorage.setItem('wobble-gp:name',name);}catch{}this.net.send(join?{type:'join',code,name,kart:this.ui.selected()}:{type:'create',name,kart:this.ui.selected(),trackId:this.ui.track()});}
    catch(e){if(document.getElementById('net-error'))$('net-error').textContent=(e as Error).message;}
    finally{buttons.forEach(b=>b.disabled=false);}
   };
-  $('net-create').onclick=()=>void connect(false);$('net-join').onclick=()=>void connect(true);$('net-cancel').onclick=()=>{this.net.disconnect();this.ui.close();};
+  $('net-create').onclick=()=>void connect(false);$('net-join').onclick=()=>void connect(true);$('net-cancel').onclick=()=>{this.net.disconnect();this.ui.close();this.ui.intro();};
  }
  exit(){this.net.send({type:'leave'});this.net.disconnect();this.signature=this.visualSignature=this.lastPhase='';this.round=-1;this.resultsOpen=false;this.remote=[];this.world.resetCoins();this.ui.close();this.ui.intro();this.ui.select(this.ui.selected());}
  private receive(s:RoomState){
+  this.ui.selectTrack(s.trackId);
   const me=this.me;if(!me)return;
   if(s.round!==this.round){this.round=s.round;this.resultsOpen=false;this.snap();}
   if(s.phase!==this.lastPhase){
@@ -63,8 +66,8 @@ export class OnlineGame {
   const signature=JSON.stringify([s.host,s.players.map(p=>[p.id,p.name,p.kart,p.ready])]);if(signature===this.signature)return;this.signature=signature;
   const me=this.me!,host=s.host===this.net.id,canStart=s.players.length>=2&&s.players.every(p=>p.ready);
   const link=new URL(location.href);link.search='';link.searchParams.set('room',s.code);
-  this.ui.open(`<small>THE ODD ROOM / 怪车候场中</small><h2 id="modal-title">叫上朋友，凑一桌怪车。</h2><div class="room-code"><span>房间码 · ${s.players.length}/4 人</span><strong>${s.code}</strong><button id="net-copy">复制邀请链接</button></div><ol class="room-roster">${s.players.map(p=>`<li data-peer="${p.id}"><img src="${this.ui.thumbnails().get(p.kart)||''}" alt="${spec(p).name}"><span><b>${escape(p.name)}${p.id===this.net.id?' · 你':''}</b><small>${spec(p).name}${p.id===s.host?' · 房主':''}</small></span><em>${p.ready?'已准备 ✓':'挑车中'}</em></li>`).join('')}</ol><label class="net-label" for="net-kart">你的怪车（换车后需重新准备）</label><select class="net-input" id="net-kart">${KARTS.map(k=>`<option value="${k.id}" ${k.id===me.kart?'selected':''}>${k.name}</option>`).join('')}</select><div class="room-buttons"><button class="primary" id="net-ready">${me.ready?'取消准备':'我准备好了 ✓'}</button>${host?`<button class="primary" id="net-start" ${canStart?'':'disabled'}>全员发车 ↗</button>`:'<span>等待房主发车</span>'}</div><p class="net-footnote">至少 2 人且全员准备后发车。比赛期间不能中途加入；每局最多 10 分钟。</p><p id="net-error" role="status" class="net-error"></p><button class="secondary" id="net-leave">退出房间</button>`);
-  $('net-ready').onclick=()=>this.net.send({type:'ready',ready:!this.me?.ready});
+  this.ui.open(`<small>THE ODD ROOM / 怪车候场中</small><h2 id="modal-title">叫上朋友，凑一桌怪车。</h2><div class="room-code"><span>${trackSpec(s.trackId).name} · ${s.players.length}/4 人</span><strong>${s.code}</strong><button id="net-copy">复制邀请链接</button></div><ol class="room-roster">${s.players.map(p=>`<li data-peer="${p.id}"><img src="${this.ui.thumbnails().get(p.kart)||''}" alt="${spec(p).name}"><span><b>${escape(p.name)}${p.id===this.net.id?' · 你':''}</b><small>${spec(p).name}${p.id===s.host?' · 房主':''}</small></span><em>${p.ready?'已准备 ✓':'挑车中'}</em></li>`).join('')}</ol><label class="net-label" for="net-kart">你的怪车（换车后需重新准备）</label><select class="net-input" id="net-kart">${KARTS.map(k=>`<option value="${k.id}" ${k.id===me.kart?'selected':''}>${k.name}</option>`).join('')}</select><div class="room-buttons"><button class="primary" id="net-ready">${me.ready?'取消准备':'我准备好了 ✓'}</button>${host?`<button class="primary" id="net-start" ${canStart?'':'disabled'}>全员发车 ↗</button>`:'<span>等待房主发车</span>'}</div><p class="net-footnote">至少 2 人且全员准备后发车。比赛期间不能中途加入；每局最多 10 分钟。</p><p id="net-error" role="status" class="net-error"></p><button class="secondary" id="net-leave">退出房间</button>`);
+  $('net-ready').onclick=()=>{if(this.me?.ready)this.net.send({type:'ready',ready:false});else this.ui.prepare(()=>{this.signature='';this.net.send({type:'ready',ready:true});});};
   if(host)$('net-start').onclick=()=>this.ui.prepare(()=>this.net.send({type:'start'}));
   $('net-kart').onchange=()=>this.net.send({type:'kart',kart:($('net-kart') as HTMLSelectElement).value as KartId});
   $('net-leave').onclick=()=>this.exit();
