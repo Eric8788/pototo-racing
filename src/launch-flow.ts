@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {KARTS,type KartId,type KartModel} from './kart-models';
+import {KARTS,animateShowroom,type KartId,type KartModel} from './kart-models';
 import {TRACKS,trackSpec,type TrackId} from './tracks';
 import {trackLength} from './track';
 export type EntryMode='single'|'online';
@@ -21,14 +21,14 @@ export class LaunchFlow {
  private holder=new THREE.Group();private controls?:OrbitControls;private previews=new Map<KartId,THREE.Object3D>();
  private moving=0;private pending:TrackId='potato';private swapped=false;
  private orbitScene=new THREE.Scene();private orbit=new THREE.Group();private planets:THREE.Group[]=[];
- private orbitAngle=0;private fromAngle=0;private targetAngle=0;private viewAngle=.65;private spin=0;private rotateResume=0;
+ private showroomTime=0;private orbitAngle=0;private fromAngle=0;private targetAngle=0;private viewAngle=.65;private spin=0;private rotateResume=0;
  constructor(private o:Options){
   this.ui.id='setup-ui';this.ui.hidden=true;document.body.append(this.ui);
   this.garage.background=new THREE.Color(0xe1e6d9);this.garage.fog=new THREE.Fog(0xe1e6d9,18,42);
   this.garage.add(new THREE.HemisphereLight(0xfff9e5,0x668c83,3));
-  const light=new THREE.DirectionalLight(0xffe8c9,3.2);light.position.set(-4,9,6);this.garage.add(light);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:0xe1e6d9,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.21;this.garage.add(ground);
-  const stand=new THREE.Mesh(new THREE.CylinderGeometry(3,3.15,.26,72),new THREE.MeshStandardMaterial({color:0xf6f2df,roughness:.8}));stand.position.y=-.08;this.garage.add(stand);
+  const light=new THREE.DirectionalLight(0xffe8c9,3.2);light.position.set(-4,9,6);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-5,right:5,top:5,bottom:-5,near:.1,far:25});light.shadow.normalBias=.025;light.shadow.bias=-.0001;this.garage.add(light);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:0xe1e6d9,roughness:1}));ground.receiveShadow=true;ground.rotation.x=-Math.PI/2;ground.position.y=-.21;this.garage.add(ground);
+  const stand=new THREE.Mesh(new THREE.CylinderGeometry(3,3.15,.26,72),new THREE.MeshStandardMaterial({color:0xf6f2df,roughness:.8}));stand.receiveShadow=true;stand.position.y=-.08;this.garage.add(stand);
   const ring=new THREE.Mesh(new THREE.TorusGeometry(3.03,.035,8,72),new THREE.MeshBasicMaterial({color:0xe4a963}));ring.rotation.x=Math.PI/2;ring.position.y=.065;this.garage.add(ring);
   const grid=new THREE.GridHelper(60,30,0xbdcabc,0xd0dacd);grid.position.y=-.195;this.garage.add(grid);this.garage.add(this.holder);
   this.orbitScene.background=new THREE.Color(0xbcdad3);this.orbit.position.z=-190;this.orbitScene.add(this.orbit);
@@ -60,7 +60,7 @@ export class LaunchFlow {
  private choose(id:KartId){
   this.o.select(id);this.holder.clear();
   if(!this.previews.has(id)){const clone=this.o.models().get(id)!.root.clone(true);clone.visible=true;this.previews.set(id,clone);}
-  this.holder.add(this.previews.get(id)!);this.holder.position.x=2.5;
+  this.holder.add(this.previews.get(id)!);this.holder.position.x=2.5;this.showroomTime=0;
   const k=KARTS.find(k=>k.id===id)!;el('garage-name').textContent=k.name;el('garage-tagline').textContent=k.tagline;el('garage-number').textContent=`0${KARTS.indexOf(k)+1} / ${k.english}`;
   this.ui.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.choice===id)));
  }
@@ -83,6 +83,7 @@ export class LaunchFlow {
   if(this.stage==='home')return true;
   if(this.stage==='hidden')return false;
   if(this.stage==='garage'){
+   if(!matchMedia('(prefers-reduced-motion: reduce)').matches){this.showroomTime+=dt;if(this.holder.children[0])animateShowroom(this.holder.children[0],this.showroomTime);}
    this.garageCamera.aspect=innerWidth/innerHeight;this.garageCamera.fov=this.garageCamera.aspect<1?58:38;this.garageCamera.updateProjectionMatrix();this.holder.position.x=THREE.MathUtils.damp(this.holder.position.x,0,11,dt);this.controls!.autoRotate=performance.now()>this.rotateResume&&!matchMedia('(prefers-reduced-motion: reduce)').matches;this.controls!.update(dt);this.o.renderer.render(this.garage,this.garageCamera);return true;
   }
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;

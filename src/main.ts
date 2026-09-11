@@ -180,7 +180,7 @@ window.addEventListener('keydown',e=>{
  if(e.repeat){keys.add(e.code);return;}
  if(e.code==='Escape'){if(online.active&&(online.net.state?.phase==='lobby'||online.me?.race.finished||online.me?.dnf||online.net.state?.phase==='results'))return;if($('modal-backdrop').classList.contains('visible')){if(mode!=='finished')closeModal();}else if(mode==='race')showHelp();return;}
  if(paused)return;
- if(e.code==='KeyR')respawn();else if(e.code==='KeyC')toggleCamera();else if(e.code==='KeyM')sound.toggle();else if(e.code==='KeyH'){sound.init();sound.tone(220,.2,'square',.035);setTimeout(()=>sound.tone(165,.15,'square',.03),110);toast('叭叭！土豆让一让。',1.4);}else if(e.code==='Enter'&&mode==='intro')return;keys.add(e.code);
+ if(e.code==='KeyR')respawn();else if(e.code==='KeyC')toggleCamera();else if(e.code==='KeyM')sound.toggle();else if(e.code==='KeyH'){sound.init();sound.tone(330,.09,'square',.045);setTimeout(()=>sound.tone(210,.12,'sawtooth',.04),85);setTimeout(()=>sound.tone(120,.18,'square',.035),205);toast('叭叭——土豆车表示：借过一下啦！',1.8);}else if(e.code==='Enter'&&mode==='intro')return;keys.add(e.code);
 });
 window.addEventListener('keyup',e=>keys.delete(e.code));
 function releaseInput(){keys.clear();touch.clear();document.querySelectorAll('.touch-control.active').forEach(e=>e.classList.remove('active'));}
@@ -208,7 +208,7 @@ function step(dt:number,override?:Control){
    const fell=vehicle.step(dt,override||controls(),world.obstacles);if(fell&&respawnCooldown<=0)respawn();
    competition.step(dt,world.obstacles,world.boosts);
    const nearest=nearestTrack(vehicle.x,vehicle.z);
-   for(const t of world.boosts)if(Math.abs(nearest.progress-t)<.011&&nearest.distance<2.6&&padCooldown<=0&&vehicle.speed>3){vehicle.padBoost=1.1;padCooldown=2;sound.tone(180,.25,'sawtooth',.025);toast('咻——！土豆涡轮启动。',1.5);}
+   for(const t of world.boosts)if(Math.abs(nearest.progress-t)<.011&&nearest.distance<2.6&&padCooldown<=0&&vehicle.speed>3){vehicle.padBoost=1.1;padCooldown=2;sound.tone(180,.25,'sawtooth',.025);toast('咻——！土豆起飞，谁还在写作业？！',2.2);}
    for(const c of world.coins)if(!c.collected&&Math.hypot(vehicle.x-c.x,vehicle.z-c.z)<1.8&&vehicle.y<2){c.collected=true;c.object.visible=false;coins++;vehicle.boost=Math.min(1,vehicle.boost+.15);if(coinSoundCooldown<=0){sound.tone(880,.1);coinSoundCooldown=.1;}}
    const event=race.step(vehicle.x,vehicle.z,dt);if(event==='lap'){world.resetCoins();toast(`第 ${race.lap} 圈！${race.lap===3?'最后一圈，土豆都站起来了。':'刚才那圈有点帅。'}`,3);sound.tone(660,.25);}if(event==='finish')finish();
    if((vehicle.drifting||vehicle.offroad||vehicle.boosting)&&Math.abs(vehicle.speed)>4&&Math.random()>.35)emitDust();
@@ -243,7 +243,7 @@ function updateHUD(){
  leaderboard.classList.toggle('visible',selectedGameMode==='race'&&(mode==='race'||mode==='countdown'));
  $('position').innerHTML=`${competition.place} <small>/ 4</small>`;
  $('standings').innerHTML=competition.standings().map((e,i)=>`<li class="${e.id==='player'?'is-player':''}"><b>${i+1}</b><i style="background:${e.color}"></i><span>${e.name}</span><small>${e.race.finished?'完成':`${e.race.lap}/3`}</small></li>`).join('');
- $('speed').textContent=String(Math.round(Math.abs(vehicle.speed)*3.6));$('boost-bar').style.width=`${vehicle.boost*100}%`;$('boost-percent').textContent=`${Math.round(vehicle.boost*100)}%`;$('lap').innerHTML=`${String(race.lap).padStart(2,'0')} <small>/ 03</small>`;$('time').textContent=formatTime(race.elapsed);$('coins').textContent=String(coins).padStart(2,'0');$('drift').classList.toggle('show',mode==='race'&&!paused&&(vehicle.drifting||vehicle.airborne||vehicle.boosting));$('drift').textContent=vehicle.airborne?'POTATO AIRLINES!':vehicle.boosting?'FULL POTATO!':'NICE & WOBBLY!';drawMap();
+ $('speed').textContent=String(Math.round(Math.abs(vehicle.speed)*3.6));$('boost-bar').style.width=`${vehicle.boost*100}%`;$('boost-percent').textContent=`${Math.round(vehicle.boost*100)}%`;$('lap').innerHTML=`${String(race.lap).padStart(2,'0')} <small>/ 03</small>`;$('time').textContent=formatTime(race.elapsed);$('coins').textContent=String(coins).padStart(2,'0');$('drift').classList.toggle('show',mode==='race'&&!paused&&(vehicle.drifting||vehicle.airborne||vehicle.boosting));$('drift').textContent=vehicle.airborne?'起飞！土豆航空已上线 ✈':vehicle.boosting?'冲刺！这颗土豆开挂了！':'NICE & WOBBLY!';drawMap();
  if(online.active)online.hud();
  if(selectedGameMode==='race'||online.active)for(const [i,rival] of competition.rivals.entries()){if(online.active&&(!online.remote[i]?.connected||online.remote[i]?.dnf))continue;ctx.fillStyle=rival.color;ctx.beginPath();ctx.arc(rival.vehicle.x*2.5+150,rival.vehicle.z*2.5+114,4.8,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff9e9';ctx.lineWidth=1.5;ctx.stroke();}
 }

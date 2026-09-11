@@ -53,18 +53,19 @@ export class World {
   for(const s of [-1,1]){const edge=box(rampGroup,C.ivory,s*(w-.15),h/2+.035,0,.15,.08,ramp.length,.015);edge.rotation.x=-Math.atan(h/ramp.length);}
   // Collectible potato tokens, placed along the racing line.
   for(let i=0;i<26;i++){const t=(i+.5)/26;const f=frameAt(t);const g=new THREE.Group();g.position.set(f.position.x,.95,f.position.z);p.add(g);const token=mesh(new THREE.CylinderGeometry(.55,.55,.18,10),C.yellow,g);token.rotation.x=Math.PI/2;const mark=box(g,C.ivory,0,0,.12,.17,.49,.06,.035);mark.rotation.z=-.3;this.coins.push({object:g,x:f.position.x,z:f.position.z,collected:false});}
-  this.potato(0,-2,1.5,0);this.potato(-26,-3,.42,.4);this.potato(29,6,.37,-1);
+  if(getTrack()==='potato'){this.potato(0,-2,1.5,0);this.potato(-26,-3,.42,.4);this.potato(29,6,.37,-1);
   // Central paddock / picnic village.
   const plaza=cylinder(p,0xe9d7b2,-3,-.01,-1,15,.1,15,48);plaza.scale.z=.84;plaza.castShadow=false;
   this.building(-17,9,0);this.building(16,-12,.35);
   for(let i=0;i<5;i++){const x=-12+i*4.5;box(p,C.ivory,x,.23,-16,2.8,.45,1.2);box(p,i%2?C.teal:C.coral,x,.52,-16,2.6,.12,1.05);}
   const billboard=new THREE.Group();billboard.position.set(-7,0,18);billboard.rotation.y=.12;p.add(billboard);for(const s of [-1,1])box(billboard,C.ink,s*3,1.5,0,.2,3,.2);sign(billboard,'小心，前方有薯',0,3.6,0,8.5,'#fff4dd','WATCH OUT FOR THE LOCAL POTATO');
+  }else this.themeLandmarks();
   const rampSign=new THREE.Group();rampSign.position.set(ramp.x+7,0,ramp.z);rampSign.rotation.y=.6;p.add(rampSign);box(rampSign,C.teal,0,1.7,0,.2,3.4,.2);sign(rampSign,'起飞！',0,3.5,0,4,'#f7c967');
   // Keep trees and props out of the driveable road.
   for(let i=0;i<53;i++){
    const x=(rand()-.5)*116,z=(rand()-.5)*87;
    if((x/59)**2+(z/44)**2>.92||nearestTrack(x,z).distance<9||Math.abs(x)<24&&Math.abs(z)<20)continue;
-   this.tree(x,z,.7+rand()*.8);
+   if(getTrack()==='potato')this.tree(x,z,.7+rand()*.8);else if(getTrack()==='sunset')this.pencilProp(x,z,3+rand()*4);else this.crater(x,z,1+rand()*2);
   }
   for(let i=0;i<22;i++){
    const f=frameAt(i/22);const s=i%2?1:-1;const x=f.position.x+f.normal.x*8*s,z=f.position.z+f.normal.z*8*s;this.cone(x,z);
@@ -74,13 +75,50 @@ export class World {
    const r=.4+rand()*.8;const rock=mesh(new THREE.DodecahedronGeometry(r),i%3?0xd7c59f:0xa5b79d,p,x,r*.5,z);rock.scale.y=.7;rock.rotation.set(rand(),rand(),rand());
   }
   for(const t of [.19,.43,.67,.93]){const f=frameAt(t);const g=new THREE.Group();g.position.set(f.position.x+f.normal.x*8,0,f.position.z+f.normal.z*8);g.rotation.y=f.heading+Math.PI/2;p.add(g);for(const s of [-1,1])box(g,C.ink,s*1.2,1.1,0,.1,2.2,.1);sign(g,'› › ›',0,2.5,0,4,'#fff4d8');}
-  for(let i=0;i<6;i++){const g=new THREE.Group();p.add(g);g.position.set((rand()-.5)*140,20+rand()*10,(rand()-.5)*110);for(let j=0;j<3;j++)sphere(g,C.ivory,(j-1)*2,Math.sin(j)*.7,0,2.7,1.1,1.7).castShadow=false;this.clouds.push(g);}
+  for(let i=0;i<(getTrack()==='moon'?0:6);i++){const g=new THREE.Group();p.add(g);g.position.set((rand()-.5)*140,20+rand()*10,(rand()-.5)*110);for(let j=0;j<3;j++)sphere(g,C.ivory,(j-1)*2,Math.sin(j)*.7,0,2.7,1.1,1.7).castShadow=false;this.clouds.push(g);}
   // Tiny flowers, tufts and mushrooms add scale without heavy textures.
   for(let i=0;i<95;i++){
    const x=(rand()-.5)*116,z=(rand()-.5)*85;if((x/59)**2+(z/44)**2>.9||nearestTrack(x,z).distance<7||Math.abs(x)<21&&Math.abs(z)<18)continue;
-   sphere(p,i%3?0xe9e9bd:C.coral,x,.16,z,.18,.22,.18).castShadow=false;
+   if(getTrack()==='moon')sphere(p,0xbcd5e1,x,.3,z,.2,.65,.2).castShadow=false;else sphere(p,i%3?0xe9e9bd:C.coral,x,.16,z,.18,.22,.18).castShadow=false;
   }
   this.mergeStatic();
+ }
+ themeLandmarks(){
+  const p=this.group;
+  if(getTrack()==='sunset'){
+   // An oversized open exercise book forms the central plaza.
+   const book=new THREE.Group();book.position.set(-2,.15,-2);book.rotation.y=-.12;p.add(book);
+   box(book,0x427c7a,0,.22,0,29,.45,20,.4);box(book,0xfff6dd,0,.58,0,28.3,.4,19.3,.22);
+   box(book,0xd39d7e,0,.79,0,.2,.035,19,0);
+   for(let z=-7;z<=7;z+=2)for(const side of [-1,1])box(book,0xaac0c7,side*7,.793,z,11,.026,.07,0);
+   for(let z=-8;z<=8;z+=2){const ring=mesh(new THREE.TorusGeometry(.38,.08,6,12,Math.PI),0x537578,book,0,.87,z);ring.rotation.y=Math.PI/2;}
+   sign(book,'作业先放一放',0,2,0,12,'#fff6dd','RACING IS ALSO HOMEWORK');
+   this.obstacles.push({x:-2,z:-2,radius:10,object:book});
+   this.pencilProp(-20,-9,12);this.pencilProp(17,-11,14);this.pencilProp(12,12,8);
+   const eraser=new THREE.Group();eraser.position.set(-18,0,10);eraser.rotation.y=.3;p.add(eraser);box(eraser,0xe7949b,0,1.7,0,8,3.4,5,.8);box(eraser,0x416f70,0,1.7,.1,8.1,2.1,5.1,.35);sign(eraser,'不许内卷',0,1.8,2.7,6,'#faf3de');this.obstacles.push({x:-18,z:10,radius:5,object:eraser});
+   const ruler=box(p,0xf5c66f,8,.15,-20,21,.3,2.8,.1);ruler.rotation.y=.08;
+  }else{
+   // Lunar base replaces every village landmark, with a prominent ringed planet.
+   this.crater(0,0,10);this.crater(-20,-8,5);this.crater(23,6,4);
+   const planet=new THREE.Group();planet.position.set(0,11,-4);planet.rotation.z=.3;p.add(planet);
+   sphere(planet,0xb09acc,0,0,0,5.5);const ring=mesh(new THREE.TorusGeometry(8,.6,10,56),0xefc884,planet);ring.rotation.x=Math.PI/2;ring.scale.y=.72;
+   const landing=cylinder(p,0x59688b,13,.1,12,6,.2,6,40);landing.castShadow=false;
+   const outline=mesh(new THREE.TorusGeometry(5.6,.16,8,48),0xaddbd2,p,13,.23,12);outline.rotation.x=Math.PI/2;
+   box(p,0xd2ede6,13,.24,12,.45,.04,4,0);box(p,0xd2ede6,11.8,.24,12,.45,.04,4,0);box(p,0xd2ede6,12.4,.24,12,1.6,.04,.4,0);
+   const station=new THREE.Group();station.position.set(-17,0,9);p.add(station);sphere(station,0xd7d7e6,0,1.7,0,5,2.5,4);box(station,0x607293,0,1.5,3.3,2.4,2.6,.8,.5);sign(station,'导航欠费',0,3.6,2.6,6,'#dcd9ed','U.F.OOPS BASE');this.obstacles.push({x:-17,z:9,radius:5,object:station});
+   const mast=new THREE.Group();mast.position.set(18,0,-12);p.add(mast);cylinder(mast,0x8992b1,0,4,0,.3,8);const dish=mesh(new THREE.SphereGeometry(3,24,14,0,Math.PI*2,0,Math.PI/2),0xd4cbe3,mast,0,8,0);dish.rotation.z=-.7;dish.rotation.x=.45;dish.scale.y=.4;this.obstacles.push({x:18,z:-12,radius:2,object:mast});
+  }
+ }
+ pencilProp(x:number,z:number,height:number){
+  const g=new THREE.Group();g.position.set(x,0,z);g.rotation.z=.10;this.group.add(g);
+  cylinder(g,0xe9bb4c,0,height*.5,0,.7,height,.7,6);cylinder(g,0xe9cca0,0,height+.7,0,.7,1.4,0,6);cylinder(g,0x36484b,0,height+1.32,0,.17,.38,0,6);cylinder(g,0xa6c1b8,0,.55,0,.74,.4,.74,12);cylinder(g,0xe3919d,0,.22,0,.72,.44,.72,12);
+  this.obstacles.push({x,z,radius:1.3,object:g});
+ }
+ crater(x:number,z:number,r:number){
+  const g=new THREE.Group();g.position.set(x,.03,z);this.group.add(g);
+  const rim=mesh(new THREE.TorusGeometry(r,r*.14,8,32),0x938dab,g);rim.rotation.x=Math.PI/2;rim.scale.z=.5;
+  const inner=cylinder(g,0x777b98,0,.01,0,r*.88,.06,r*.88,32);inner.castShadow=false;
+  if(r>3)this.obstacles.push({x,z,radius:r*.9,object:g});
  }
  mergeStatic(){
   this.group.updateMatrixWorld(true);
