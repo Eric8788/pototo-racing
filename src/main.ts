@@ -102,7 +102,7 @@ const online=new OnlineGame({
  open:html=>{openModal(html);$('modal').classList.add('net-modal');},close:closeModal,
  intro:()=>{mode='intro';$('intro').classList.remove('hidden');$('intro').inert=false;$('hud').classList.remove('finished','playing');$('countdown').textContent='';competition.reset(selectedGameMode);document.querySelector('.leaderboard-title>span')!.textContent='POSITION';},
  phase:phase=>{mode=phase;$('intro').classList.add('hidden');$('intro').inert=true;$('hud').classList.toggle('playing',phase!=='finished');$('hud').classList.toggle('finished',phase==='finished');if(phase==='countdown'){for(const s of skids)s.visible=false;for(const d of dust){d.life=0;d.mesh.visible=false;}$('toast').classList.remove('show');}},
- select:selectKart,selected:()=>selectedKart,thumbnails:()=>thumbnails,toast
+ select:selectKart,selected:()=>selectedKart,thumbnails:()=>thumbnails,toast,prepare:prepareSteering
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
 onlineButton.onclick=()=>prepareSteering(()=>online.open());

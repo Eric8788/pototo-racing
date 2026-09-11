@@ -14,6 +14,7 @@ interface UI {
  phase:(phase:'countdown'|'race'|'finished')=>void;
  select:(id:KartId)=>void;selected:()=>KartId;thumbnails:()=>Map<KartId,string>;
  toast:(message:string)=>void;
+ prepare:(proceed:()=>void)=>void;
 }
 export class OnlineGame {
  net=new Network();remote:NetPlayer[]=[];private signature='';private visualSignature='';private round=-1;private lastPhase='';private resultsOpen=false;
@@ -64,7 +65,7 @@ export class OnlineGame {
   const link=new URL(location.href);link.search='';link.searchParams.set('room',s.code);
   this.ui.open(`<small>THE ODD ROOM / 怪车候场中</small><h2 id="modal-title">叫上朋友，凑一桌怪车。</h2><div class="room-code"><span>房间码 · ${s.players.length}/4 人</span><strong>${s.code}</strong><button id="net-copy">复制邀请链接</button></div><ol class="room-roster">${s.players.map(p=>`<li data-peer="${p.id}"><img src="${this.ui.thumbnails().get(p.kart)||''}" alt="${spec(p).name}"><span><b>${escape(p.name)}${p.id===this.net.id?' · 你':''}</b><small>${spec(p).name}${p.id===s.host?' · 房主':''}</small></span><em>${p.ready?'已准备 ✓':'挑车中'}</em></li>`).join('')}</ol><label class="net-label" for="net-kart">你的怪车（换车后需重新准备）</label><select class="net-input" id="net-kart">${KARTS.map(k=>`<option value="${k.id}" ${k.id===me.kart?'selected':''}>${k.name}</option>`).join('')}</select><div class="room-buttons"><button class="primary" id="net-ready">${me.ready?'取消准备':'我准备好了 ✓'}</button>${host?`<button class="primary" id="net-start" ${canStart?'':'disabled'}>全员发车 ↗</button>`:'<span>等待房主发车</span>'}</div><p class="net-footnote">至少 2 人且全员准备后发车。比赛期间不能中途加入；每局最多 10 分钟。</p><p id="net-error" role="status" class="net-error"></p><button class="secondary" id="net-leave">退出房间</button>`);
   $('net-ready').onclick=()=>this.net.send({type:'ready',ready:!this.me?.ready});
-  if(host)$('net-start').onclick=()=>this.net.send({type:'start'});
+  if(host)$('net-start').onclick=()=>this.ui.prepare(()=>this.net.send({type:'start'}));
   $('net-kart').onchange=()=>this.net.send({type:'kart',kart:($('net-kart') as HTMLSelectElement).value as KartId});
   $('net-leave').onclick=()=>this.exit();
   $('net-copy').onclick=async()=>{
