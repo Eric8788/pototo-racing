@@ -20,7 +20,8 @@ const server=createServer(async(req,res)=>{
   const path=resolve(dist,'.'+(pathname==='/'?'/index.html':pathname));
   if(!path.startsWith(dist+sep)){res.writeHead(403);res.end();return;}
   const info=await stat(path);if(!info.isFile())throw Error('Not a file');
-  res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':'no-cache'});
+  const ext=extname(path),cache=pathname.startsWith('/assets/')?'public, max-age=31536000, immutable':'no-cache';
+  res.writeHead(200,{'Content-Type':mime[ext]||'application/octet-stream','Content-Length':info.size,'Cache-Control':cache});
   res.end(req.method==='HEAD'?undefined:await readFile(path));
  }catch{res.writeHead(404);res.end('Not found');}
 });
