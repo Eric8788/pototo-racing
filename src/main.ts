@@ -40,7 +40,8 @@ document.querySelector('.tag')!.textContent='四车大奖赛 · VS 3 AI';
 document.querySelector('.intro p')!.innerHTML='土豆、铅笔、飞碟，谁说不能当赛车？<br/>选一辆不太正常的小车，出发兜个歪风。';
 let renderer:THREE.WebGLRenderer;
 try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}catch(error){$('loading').textContent='你的浏览器暂时无法启动 WebGL。请开启硬件加速后刷新页面。';throw error;}
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+const renderPixelRatio=()=>Math.min(devicePixelRatio,isMobileDevice()?1.25:1.5);
+renderer.setPixelRatio(renderPixelRatio());renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xc1dcdb);scene.fog=new THREE.Fog(0xc1dcdb,145,370);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,1,400);camera.position.set(84,98,116);
 scene.add(new THREE.HemisphereLight(0xfff7df,0x729391,2.5));const sun=new THREE.DirectionalLight(0xffedcc,3.2);sun.position.set(-35,70,35);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-78,right:78,top:65,bottom:-65,near:1,far:170});sun.shadow.normalBias=.12;sun.shadow.bias=-.00008;sun.shadow.radius=3;scene.add(sun);
@@ -231,7 +232,7 @@ new GLTFLoader().load(`${import.meta.env?.BASE_URL||'/'}assets/apex-07.glb`,gltf
  selectKart(selectedKart);loaded=true;garageButton.disabled=false;onlineButton.disabled=false;$('start').removeAttribute('disabled');$('start').querySelector('span')!.textContent='出发，歪一下';$('loading').classList.add('hidden');updateCar(0);if(new URLSearchParams(location.search).has('room'))online.open();
 
 },undefined,error=>{$('loading').innerHTML='小车没有加载成功。<button id="retry">重新加载</button>';$('retry').onclick=()=>location.reload();console.error('Car model loading failed',error);});
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(renderPixelRatio());});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;$('loading').classList.remove('hidden');$('loading').textContent='画面连接暂时丢失，请刷新页面重新启动。';});
 // Only exposed in development: deterministic gameplay checks without a permanent autopilot.
 if(import.meta.env?.DEV){(window as unknown as {__game:unknown}).__game={vehicle,race,world,get mode(){return mode;},get paused(){return paused;},get loaded(){return loaded;},get coins(){return coins;},get stats(){return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};},start:startRace,respawn,controls,manual:(enabled:boolean)=>{debugManual=enabled;},advance:(seconds:number,input=emptyInput)=>{for(let i=0;i<Math.round(seconds*60);i++)step(1/60,input);updateCar(paused?0:seconds);updateHUD();},place:(t:number)=>{const f=frameAt(t);vehicle.x=f.position.x;vehicle.z=f.position.z;vehicle.heading=f.heading;vehicle.y=.13;},frameAt};}

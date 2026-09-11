@@ -38,6 +38,8 @@ npm start
 
 当前联机代码是一个长连接 Node.js WebSocket 服务，前端静态页面和 `/ws` 必须从同一个服务提供。最省改动的免费方案是 **Render Free 单服务**：它执行 `npm ci && npm run build`，再执行 `npm start`；仓库已经附带 `render.yaml`。Render 免费实例会在无访问时休眠，第一次打开可能需要几十秒唤醒，适合朋友小范围试玩，不适合承诺全天在线。
 
+本版做了设备性能保护：桌面渲染像素比上限 1.5，手机上限 1.25；服务器仍按固定 60 Hz 物理步长运行，但使用约 16 ms 调度而非高频空转，状态快照保持 20 Hz。
+
 你已有 Cloudflare 账户时，建议把 `race.ericproject.xyz` 作为游戏域名：在 Render 创建服务后，把该域名添加到 Render，Render 会给出验证用 CNAME；在 Cloudflare DNS 创建对应 CNAME 并打开代理（橙色云）。Cloudflare 会代理网页和 WebSocket，域名证书由 Render/Cloudflare 自动处理。NameSilo 只负责注册商；若域名 DNS 仍在 NameSilo，先把域名的 Nameserver 换成 Cloudflare 分配的两个 Nameserver，再在 Cloudflare 管理 DNS。不要删除现有 `@`、`www`、`hajimi` 等记录，新增 `race` 子域名即可。
 
 Vercel 适合纯前端静态部署，不能直接承载当前 `/ws` 长连接；Cloudflare Pages 也只能承载前端。把前端放 Vercel、联机服务放 Render 会增加跨域、两个域名和 WebSocket 地址配置，当前版本没有必要。后续若要完全 Cloudflare 化，需要把 `server/room.ts` 改写为 Durable Objects，并单独处理房间持久化、限流、连接恢复和观测，代码量和测试面都会明显增加。

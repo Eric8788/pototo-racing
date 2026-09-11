@@ -68,7 +68,7 @@ wss.on('connection',ws=>{
 });
 // Fixed simulation clock; snapshots at 20 Hz. A bounded accumulator avoids huge jumps.
 let previous=performance.now(),accumulator=0,steps=0;
-const simulation=setInterval(()=>{const now=performance.now();accumulator+=Math.min(.25,(now-previous)/1000);previous=now;while(accumulator>=1/60){for(const room of rooms.values())room.step(1/60);accumulator-=1/60;if(++steps%3===0)for(const room of rooms.values())broadcast(room);}},8);
+const simulation=setInterval(()=>{const now=performance.now();accumulator+=Math.min(.25,(now-previous)/1000);previous=now;while(accumulator>=1/60){for(const room of rooms.values())room.step(1/60);accumulator-=1/60;if(++steps%3===0)for(const room of rooms.values())broadcast(room);}},16);
 const heartbeat=setInterval(()=>{for(const p of peers.values()){if(!p.alive){p.ws.terminate();continue;}p.alive=false;p.ws.ping();}},10000);
 server.listen(port,'0.0.0.0',()=>{console.log(`WOBBLE GP 联机服务器 http://localhost:${port}`);for(const list of Object.values(networkInterfaces()))for(const n of list||[])if(n.family==='IPv4'&&!n.internal&&!n.address.startsWith('198.18.'))console.log(`局域网 http://${n.address}:${port}`);});
 function shutdown(){clearInterval(simulation);clearInterval(heartbeat);for(const p of peers.values())p.ws.close(1001,'Server shutting down');wss.close();server.close();}
