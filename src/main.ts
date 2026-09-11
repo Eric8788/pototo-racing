@@ -58,7 +58,8 @@ let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
-const mobileDevice=matchMedia('(pointer:coarse)').matches||innerWidth<760;
+const isMobileDevice=()=>matchMedia('(pointer:coarse)').matches||innerWidth<760;
+const mobileDevice=isMobileDevice();
 let gyroEnabled=mobileDevice,gyroSteer=0,gyroBaseline=0,gyroCalibrated=false,gyroPermissionAsked=false;
 const gyroButton=$<HTMLButtonElement>('gyro-toggle');
 function setGyroLabel(){gyroButton.textContent=gyroEnabled?'手机倾斜：开':'手机倾斜：关';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));}
@@ -79,7 +80,7 @@ const online=new OnlineGame({
 },vehicle,race,world,rivalVisuals);
 online.net.input=()=>paused||document.hidden?emptyInput:controls();
 onlineButton.onclick=()=>online.open();
-function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=mobileDevice&&mode==='race'&&!reverse&&!brake;return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0)-(reverse?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
+function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=isMobileDevice()&&mode==='race'&&!reverse&&!brake;return {throttle:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0)-(reverse?1:0),steer:gyroEnabled?gyroSteer:(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
  context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
  init(){if(this.context)return;this.context=new AudioContext();this.engine=this.context.createOscillator();this.engine.type='triangle';this.engineGain=this.context.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(this.context.destination);this.engine.start();}
