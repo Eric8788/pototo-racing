@@ -58,13 +58,13 @@ let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
-let gyroEnabled=false,gyroSteer=0,gyroBaseline=0;
+let gyroEnabled=false,gyroSteer=0,gyroBaseline=0,gyroCalibrated=false;
 const gyroButton=$<HTMLButtonElement>('gyro-toggle');
 function setGyroLabel(){gyroButton.textContent=gyroEnabled?'手机倾斜：开':'手机倾斜：关';gyroButton.setAttribute('aria-pressed',String(gyroEnabled));}
-function onOrientation(e:DeviceOrientationEvent){const angle=screen.orientation?.angle||0;const raw=angle===90?-(e.beta||0):angle===270?(e.beta||0):(e.gamma||0);if(Math.abs(raw-gyroBaseline)<45)gyroSteer=THREE.MathUtils.clamp((raw-gyroBaseline)/18,-1,1);}
+function onOrientation(e:DeviceOrientationEvent){const angle=screen.orientation?.angle||0;const raw=angle===90?-(e.beta||0):angle===270?(e.beta||0):(e.gamma||0);if(!gyroCalibrated){gyroBaseline=raw;gyroCalibrated=true;}if(Math.abs(raw-gyroBaseline)<45)gyroSteer=THREE.MathUtils.clamp((raw-gyroBaseline)/18,-1,1);}
 async function toggleGyro(){
- if(gyroEnabled){gyroEnabled=false;window.removeEventListener('deviceorientation',onOrientation);gyroSteer=0;setGyroLabel();return;}
- try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted')throw Error('permission');gyroBaseline=screen.orientation?.angle===90?0:0;gyroEnabled=true;window.addEventListener('deviceorientation',onOrientation);setGyroLabel();toast('倾斜手机控制左右，油门继续按 ↑');}
+ if(gyroEnabled){gyroEnabled=false;window.removeEventListener('deviceorientation',onOrientation);gyroSteer=0;gyroCalibrated=false;setGyroLabel();return;}
+ try{const ask=(DeviceOrientationEvent as unknown as {requestPermission?:()=>Promise<string>}).requestPermission;if(ask&&await ask()!=='granted')throw Error('permission');gyroCalibrated=false;gyroEnabled=true;window.addEventListener('deviceorientation',onOrientation);setGyroLabel();toast('保持当前姿势，倾斜手机控制左右，油门继续按 ↑');}
  catch{toast('没有获得陀螺仪权限，仍可用屏幕方向键。',2.5);}
 }
 gyroButton.onclick=()=>void toggleGyro();setGyroLabel();
