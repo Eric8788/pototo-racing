@@ -68,7 +68,12 @@ export class LaunchFlow {
  private choose(id:KartId){
   this.o.select(id);this.holder.clear();
   if(!this.previews.has(id)){const clone=this.o.models().get(id)!.root.clone(true);clone.visible=true;this.previews.set(id,clone);}
-  this.holder.add(this.previews.get(id)!);this.holder.position.x=2.5;this.showroomTime=0;
+  const preview=this.previews.get(id)!;
+  // Imported Blender roots may carry an authored scene offset. Recenter the
+  // visible footprint so every vehicle sits on the same garage plinth center.
+  const bounds=new THREE.Box3().setFromObject(preview),center=bounds.getCenter(new THREE.Vector3());
+  preview.position.x-=center.x;preview.position.z-=center.z;
+  this.holder.add(preview);this.holder.position.x=2.5;this.showroomTime=0;
   const k=KARTS.find(k=>k.id===id)!;el('garage-name').textContent=k.name;el('garage-tagline').textContent=k.tagline;el('garage-number').textContent=`0${KARTS.indexOf(k)+1} / ${k.english}`;
   this.ui.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.choice===id)));
  }
