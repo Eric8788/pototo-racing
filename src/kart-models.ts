@@ -88,6 +88,9 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
     for(const m of(Array.isArray(o.material)?o.material:[o.material]))if(m.transparent){m.depthWrite=false;o.castShadow=false;}
    }
   });
+  if(id==='potato'){
+   assembly.traverse(o=>{if(o.name==='Expression_Eye')o.scale.multiplyScalar(.80);if(o.name==='Expression_Pupil')o.scale.multiplyScalar(.86);});
+  }
   root.updateMatrixWorld(true);return model;
  }
  if(id==='apex'){
@@ -175,7 +178,7 @@ export function kartThumbnails(models:KartModel[]):Map<KartId,string>{
  const scene=new THREE.Scene();scene.add(new THREE.HemisphereLight(0xfff4df,0x92ada1,2.5));const light=new THREE.DirectionalLight(0xffffff,3.2);light.position.set(-4,8,5);scene.add(light);
  const camera=new THREE.PerspectiveCamera(34,560/360,.1,30);camera.position.set(3.5,2.8,4.7);camera.lookAt(0,.75,0);
  const thumbnails=new Map<KartId,string>();
- for(const m of models){const copy=m.root.clone(true);copy.visible=true;scene.add(copy);r.render(scene,camera);thumbnails.set(m.id,r.domElement.toDataURL('image/png'));scene.remove(copy);}
+ for(const m of models){const copy=m.root.clone(true);copy.visible=true;const bounds=new THREE.Box3().setFromObject(copy),center=bounds.getCenter(new THREE.Vector3());copy.position.x-=center.x;copy.position.z-=center.z;if(m.id==='potato')copy.traverse(o=>{if(o.name==='Expression_Eye')o.scale.multiplyScalar(.80);if(o.name==='Expression_Pupil')o.scale.multiplyScalar(.86);});scene.add(copy);r.render(scene,camera);thumbnails.set(m.id,r.domElement.toDataURL('image/png'));scene.remove(copy);}
  r.dispose();r.forceContextLoss();return thumbnails;
 }
 
