@@ -15,7 +15,7 @@ export class Vehicle {
   this.boosting=(input.boost&&!this.boostLocked&&this.boost>.03&&input.throttle>0)||this.padBoost>0;
   this.boost=THREE.MathUtils.clamp(this.boost+(this.boosting&&this.padBoost<=0?-.25:.10)*dt,0,1);
   this.drifting=input.brake&&Math.abs(input.steer)>.1&&oldSpeed>5&&!this.airborne;
-  this.steering=THREE.MathUtils.damp(this.steering,input.steer,9,dt);
+  this.steering=THREE.MathUtils.damp(this.steering,input.steer,13,dt);
   let fx=Math.sin(this.heading),fz=Math.cos(this.heading),sx=fz,sz=-fx;
   let longitudinal=this.vx*fx+this.vz*fz;
   let lateral=this.vx*sx+this.vz*sz;
@@ -30,7 +30,7 @@ export class Vehicle {
   longitudinal=Math.max(-8,longitudinal);
   lateral*=Math.exp(-(this.drifting?1.2:this.offroad?4:8.5)*dt);
   const turnSpeed=THREE.MathUtils.clamp(Math.abs(longitudinal)/8,0,1);
-  this.heading-=this.steering*turnSpeed*Math.sign(longitudinal||1)*(this.drifting?2.05:1.38)*(this.airborne?.35:1)*dt;
+  this.heading-=this.steering*turnSpeed*Math.sign(longitudinal||1)*(this.drifting?2.2:1.68)*(this.airborne?.35:1)*dt;
   // Reproject velocity onto the new heading; a little inertia keeps corners playful.
   const nfx=Math.sin(this.heading),nfz=Math.cos(this.heading);
   this.vx=longitudinal*(fx*.32+nfx*.68)+lateral*sx;

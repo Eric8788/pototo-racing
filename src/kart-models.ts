@@ -31,11 +31,11 @@ let skin:THREE.MeshStandardMaterial|undefined;
 function potatoSkin(){
  if(skin)return skin;
  const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const ctx=canvas.getContext('2d')!;
- ctx.fillStyle='#d3a66c';ctx.fillRect(0,0,256,256);let n=371;const random=()=>{n=(n*1664525+1013904223)>>>0;return n/4294967296;};
- for(let i=0;i<2100;i++){const x=random()*256,y=random()*256,r=.3+random()*1.1;ctx.fillStyle=i%2?'#e1b77c45':'#976b3c24';ctx.beginPath();ctx.ellipse(x,y,r,r*.7,0,0,Math.PI*2);ctx.fill();}
- for(let i=0;i<42;i++){ctx.fillStyle='#94633765';ctx.beginPath();ctx.ellipse(random()*256,random()*256,1+random()*2,.65+random(),random()*3,0,Math.PI*2);ctx.fill();}
+ ctx.fillStyle='#b88236';ctx.fillRect(0,0,256,256);let n=371;const random=()=>{n=(n*1664525+1013904223)>>>0;return n/4294967296;};
+ for(let i=0;i<5200;i++){const x=random()*256,y=random()*256,r=.3+random()*1.1;ctx.fillStyle=i%2?'#efb65a65':'#75431960';ctx.beginPath();ctx.ellipse(x,y,r,r*.7,0,0,Math.PI*2);ctx.fill();}
+ for(let i=0;i<65;i++){ctx.fillStyle='#73451e90';ctx.beginPath();ctx.ellipse(random()*256,random()*256,1+random()*2,.65+random(),random()*3,0,Math.PI*2);ctx.fill();}
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
- skin=new THREE.MeshStandardMaterial({map:texture,roughness:.82,bumpMap:texture,bumpScale:.025});return skin;
+ skin=new THREE.MeshStandardMaterial({map:texture,roughness:.86,bumpMap:texture,bumpScale:.045});return skin;
 }
 function arc(g:THREE.Object3D,color:number,r:number,tubeRadius:number,x:number,y:number,z:number,start:number,length:number){const a=add(g,new THREE.TorusGeometry(r,tubeRadius,8,36,length),mat(color,.2,.38),x,y,z);a.rotation.z=start;return a;}
 function label(g:THREE.Object3D,text:string,color:string,bg:string,x:number,y:number,z:number,width:number,rotation=0){
@@ -59,9 +59,37 @@ function wheelSet(model:KartModel,base:THREE.Group,r=.44,front=1.15,rear=-1.12,a
 
  }
 }
+let completeFleet:THREE.Object3D|undefined;
+export function setCompleteFleet(source:THREE.Object3D){
+ for(const {id} of KARTS)if(!source.getObjectByName('Fleet_'+id))throw Error(`Missing complete vehicle: ${id}`);
+ completeFleet=source;
+}
+function shell(_id:KartId,_parent:THREE.Object3D){
+ // Blender shell draft remains available as a reference asset; use the tested
+ // procedural assemblies until dedicated wheel and expression sockets are authored.
+ return false;
+}
 export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
  const root=new THREE.Group();root.name='Kart_'+id;root.scale.setScalar(VEHICLE_SCALE);
  const model:KartModel={id,root,wheels:[],steers:[],phase:0};
+ const authored=completeFleet?.getObjectByName('Fleet_'+id);
+ if(authored){
+  const assembly=authored.clone(true);root.add(assembly);root.userData.modelVersion='blender-poster-v5';
+  assembly.traverse(o=>{
+   if(o.name.includes('__Wheel_'))model.wheels.push(o);
+   if(o.name.includes('__Steer_F'))model.steers.push(o);
+   if(o.name.includes('__Hover'))model.hover=o as THREE.Group;
+   if(o.name.includes('__Expression_Eye_'))o.name='Expression_Eye';
+   if(o.name.includes('__Expression_Pupil_'))o.name='Expression_Pupil';
+   if(o.name.includes('__Inspection_Sprout'))o.name='Inspection_Sprout';
+   if(o instanceof THREE.Mesh){
+    o.castShadow=true;o.receiveShadow=false;
+    if(o.name.startsWith('Sculpted_Potato_Skin'))o.material=potatoSkin();
+    for(const m of(Array.isArray(o.material)?o.material:[o.material]))if(m.transparent){m.depthWrite=false;o.castShadow=false;}
+   }
+  });
+  root.updateMatrixWorld(true);return model;
+ }
  if(id==='apex'){
   const original=apex.clone(true);original.scale.setScalar(1);root.add(original);
   original.traverse(o=>{if(o.name.startsWith('Wheel_'))model.wheels.push(o);if(o.name.startsWith('Steer_F'))model.steers.push(o);});
@@ -73,11 +101,13 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
   box(root,0xfff1ce,.22,.59,2.054,.14,.15,.06,.01);
   const wing=original.getObjectByName('Rear_Wing');if(wing)wing.rotation.z=.07;
  }else if(id==='potato'){
-  box(root,0x52766c,0,.45,0,1.65,.24,2.55,.1);wheelSet(model,root,.43,1.03,-1.05,.84,0xd87057);
+  wheelSet(model,root,.43,1.03,-1.05,.84,0xd87057);
+  if(!shell(id,root)){box(root,0x52766c,0,.45,0,1.65,.24,2.55,.1);
   const body=ball(root,0xd4a46c,0,1.01,-.06,.90,.83,1.51);body.rotation.z=-.06;
   body.material=potatoSkin();const positions=body.geometry.getAttribute('position');
   for(let i=0;i<positions.count;i++){const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i),d=1+.035*Math.sin(y*5+z*3)*Math.cos(x*4);positions.setXYZ(i,x*d,y*(1+.025*Math.cos(z*5)),z*d);}body.geometry.computeVertexNormals();
   for(const side of [-1,1]){const fender=ball(root,0x52766c,side*.78,.62,-1.02,.29,.23,.61);fender.material=mat(0x52766c,.15,.42);}
+  }
   const bumper=box(root,0x476b5b,0,.47,1.45,1.40,.20,.26,.10);bumper.material=mat(0x476b5b,.2,.4);
   for(const side of [-1,1]){ball(root,0xffe6b0,side*.54,.49,1.60,.10,.07,.035);box(root,0xd77760,side*.50,.65,-1.43,.2,.10,.10,.04);}
   eye(root,-.33,1.44,1.19,.27);eye(root,.32,1.50,1.16,.30);
@@ -91,6 +121,7 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
   const exhaust=add(root,new THREE.CylinderGeometry(.12,.12,.45,10),mat(0x56625c,.5),.51,.65,-1.35);exhaust.rotation.x=-.7;
  }else if(id==='pencil'){
   wheelSet(model,root,.37,.90,-1.06,.69,0xd58c83);
+  if(!shell(id,root)){
   box(root,0x42545a,0,.39,-.02,1.35,.15,2.5);
   const barrel=add(root,new THREE.CylinderGeometry(.56,.56,2.52,6),mat(0xedb72c),0,.89,-.15);barrel.rotation.x=Math.PI/2;barrel.geometry.rotateY(Math.PI/6);
   const wood=add(root,new THREE.ConeGeometry(.56,.76,6),mat(0xe8c893),0,.89,1.49);wood.rotation.x=Math.PI/2;wood.geometry.rotateY(Math.PI/6);
@@ -98,6 +129,7 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
   const band=add(root,new THREE.CylinderGeometry(.58,.58,.32,12),mat(0xadc5bc,.7,.24),0,.89,-1.40);band.rotation.x=Math.PI/2;
   for(const z of [-1.5,-1.39,-1.28]){const ring=add(root,new THREE.TorusGeometry(.579,.018,4,16),mat(0x718a83,.5),0,.89,z);ring.rotation.z=.1;}
   const rubber=box(root,0xeb919a,0,.90,-1.70,.94,.89,.4,.2);rubber.rotation.z=-.05;
+  }
   for(const x of [-.34,.34])eye(root,x,1.44,.35,.24,x<0);
   box(root,0x543d2a,0,1.19,.72,.30,.055,.075);
   label(root,'NO.2  FAST','#775c1f','#edb72c',.499,.90,-.14,1.74,Math.PI/2);
@@ -108,9 +140,11 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
  }else{
   // A complete hovercraft: no car hidden under the saucer.
   const hover=new THREE.Group();root.add(hover);model.hover=hover;
+  if(!shell(id,hover)){
   const hull=ball(hover,0xa99bce,0,.77,0,1.03,.32,1.55);hull.material=mat(0xa99bce,.45,.3);
   const lower=ball(hover,0x566271,0,.60,0,.80,.28,1.26);lower.material=mat(0x566271,.55,.38);
   const rim=add(hover,new THREE.TorusGeometry(1,.065,8,40),mat(0xe3d8ee,.6,.26),0,.78,0);rim.rotation.x=Math.PI/2;rim.scale.set(1.04,1.56,1);
+  }
   const ring=new THREE.Group();ring.position.y=.80;hover.add(ring);model.ring=ring;
   for(let i=0;i<12;i++){const a=i/12*Math.PI*2;const lamp=ball(ring,i%2?0xa8f3d3:0xfbd078,Math.sin(a)*.99,0,Math.cos(a)*1.48,.082,.042,.082);lamp.material=new THREE.MeshStandardMaterial({color:i%2?0xa8f3d3:0xfbd078,emissive:i%2?0x65d4ae:0xeeb347,emissiveIntensity:.35,roughness:.3});}
   const seal=arc(hover,0xdbc9e7,.66,.045,0,.97,-.09,0,Math.PI*2);seal.rotation.x=Math.PI/2;seal.scale.y=1.22;
@@ -131,7 +165,7 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
 export function animateKart(model:KartModel,v:Vehicle,dt:number){
  model.phase+=dt;
  for(const w of model.wheels)w.rotation.x+=v.speed/(.43*VEHICLE_SCALE)*dt;
- for(const s of model.steers){if(model.id==='apex')s.rotation.z=-v.steering*.38;else s.rotation.y=-v.steering*.38;}
+ for(const s of model.steers){if(model.id==='apex'&&!model.root.userData.modelVersion)s.rotation.z=-v.steering*.38;else s.rotation.y=-v.steering*.38;}
  if(model.hover){model.hover.position.y=.04+Math.sin(model.phase*3.5)*.06;model.hover.rotation.z=Math.sin(model.phase*2.1)*.022;}
 }
 

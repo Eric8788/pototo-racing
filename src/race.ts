@@ -9,7 +9,11 @@ export class Race {
   const {progress:p,distance}=nearestTrack(x,z);let event:''|'lap'|'finish'='';
   if(distance<7.2){
    if(this.nextGate<8&&p>=this.nextGate/8&&p<this.nextGate/8+.055){this.nextGate++;}
-   if(this.nextGate===8&&this.lastProgress>.94&&p<.06){
+   // Finish gate is deliberately forgiving on tight custom courses: once the final
+   // checkpoint is reached, crossing the start sector counts even if a frame
+   // skips over the exact .94 -> .06 seam.
+   if(this.nextGate>=7&&this.lastProgress>.82&&p<.10){
+    this.nextGate=8;
     this.lapTimes.push(this.lapTime);
     if(this.lapTime<this.best){this.best=this.lapTime;if(this.persistBest)try{localStorage.setItem('wobble-gp:best',String(this.best));}catch{}}
     this.lapTime=0;this.nextGate=1;

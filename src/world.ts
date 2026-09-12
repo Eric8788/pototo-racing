@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {getTrack} from './track';
 import {trackSpec} from './tracks';
+import {placeScenery,type SceneryFootprint} from './scenery-placement';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {frameAt,ribbon,TRACK_WIDTH,nearestTrack,ramp,type Obstacle} from './track';
@@ -21,6 +22,7 @@ function sign(p:THREE.Object3D,text:string,x:number,y:number,z:number,width:numb
 let seed=9307;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
 export interface Coin {object:THREE.Group;x:number;z:number;collected:boolean;}
 export class World {
+ sceneryFootprints:SceneryFootprint[]=[];
  gantry=new THREE.Group();private gantryRay=new THREE.Raycaster();
  group=new THREE.Group();obstacles:Obstacle[]=[];coins:Coin[]=[];mascots:THREE.Group[]=[];boosts:number[]=[.08,.57,.85];clouds:THREE.Group[]=[];
  constructor(scene:THREE.Scene){
@@ -53,6 +55,7 @@ export class World {
   for(const s of [-1,1]){const edge=box(rampGroup,C.ivory,s*(w-.15),h/2+.035,0,.15,.08,ramp.length,.015);edge.rotation.x=-Math.atan(h/ramp.length);}
   // Collectible potato tokens, placed along the racing line.
   for(let i=0;i<26;i++){const t=(i+.5)/26;const f=frameAt(t);const g=new THREE.Group();g.position.set(f.position.x,.95,f.position.z);p.add(g);const token=mesh(new THREE.CylinderGeometry(.55,.55,.18,10),C.yellow,g);token.rotation.x=Math.PI/2;const mark=box(g,C.ivory,0,0,.12,.17,.49,.06,.035);mark.rotation.z=-.3;this.coins.push({object:g,x:f.position.x,z:f.position.z,collected:false});}
+  const sceneryStart=p.children.length;
   if(getTrack()==='potato'){this.potato(0,-2,1.5,0);this.potato(-26,-3,.42,.4);this.potato(29,6,.37,-1);
   // Central paddock / picnic village.
   const plaza=cylinder(p,0xe9d7b2,-3,-.01,-1,15,.1,15,48);plaza.scale.z=.84;plaza.castShadow=false;
@@ -81,6 +84,7 @@ export class World {
    const x=(rand()-.5)*116,z=(rand()-.5)*85;if((x/59)**2+(z/44)**2>.9||nearestTrack(x,z).distance<7||Math.abs(x)<21&&Math.abs(z)<18)continue;
    if(getTrack()==='moon')sphere(p,0xbcd5e1,x,.3,z,.2,.65,.2).castShadow=false;else sphere(p,i%3?0xe9e9bd:C.coral,x,.16,z,.18,.22,.18).castShadow=false;
   }
+  this.sceneryFootprints=placeScenery(p.children.slice(sceneryStart),this.obstacles);
   this.mergeStatic();
  }
  themeLandmarks(){
@@ -93,9 +97,9 @@ export class World {
    for(let z=-7;z<=7;z+=2)for(const side of [-1,1])box(book,0xaac0c7,side*7,.793,z,11,.026,.07,0);
    for(let z=-8;z<=8;z+=2){const ring=mesh(new THREE.TorusGeometry(.38,.08,6,12,Math.PI),0x537578,book,0,.87,z);ring.rotation.y=Math.PI/2;}
    sign(book,'作业先放一放',0,2,0,12,'#fff6dd','RACING IS ALSO HOMEWORK');
-   this.obstacles.push({x:-2,z:-2,radius:10,object:book});
+   // The giant notebook is scenery; keep the drive line unobstructed.
    this.pencilProp(-20,-9,12);this.pencilProp(17,-11,14);this.pencilProp(12,12,8);
-   const eraser=new THREE.Group();eraser.position.set(-18,0,10);eraser.rotation.y=.3;p.add(eraser);box(eraser,0xe7949b,0,1.7,0,8,3.4,5,.8);box(eraser,0x416f70,0,1.7,.1,8.1,2.1,5.1,.35);sign(eraser,'不许内卷',0,1.8,2.7,6,'#faf3de');this.obstacles.push({x:-18,z:10,radius:5,object:eraser});
+   const eraser=new THREE.Group();eraser.position.set(-18,0,10);eraser.rotation.y=.3;p.add(eraser);box(eraser,0xe7949b,0,1.7,0,8,3.4,5,.8);box(eraser,0x416f70,0,1.7,.1,8.1,2.1,5.1,.35);sign(eraser,'不许内卷',0,1.8,2.7,6,'#faf3de');// The eraser is visual scenery; cones remain the gameplay obstacles.
    const ruler=box(p,0xf5c66f,8,.15,-20,21,.3,2.8,.1);ruler.rotation.y=.08;
   }else{
    // Lunar base replaces every village landmark, with a prominent ringed planet.
@@ -105,8 +109,8 @@ export class World {
    const landing=cylinder(p,0x59688b,13,.1,12,6,.2,6,40);landing.castShadow=false;
    const outline=mesh(new THREE.TorusGeometry(5.6,.16,8,48),0xaddbd2,p,13,.23,12);outline.rotation.x=Math.PI/2;
    box(p,0xd2ede6,13,.24,12,.45,.04,4,0);box(p,0xd2ede6,11.8,.24,12,.45,.04,4,0);box(p,0xd2ede6,12.4,.24,12,1.6,.04,.4,0);
-   const station=new THREE.Group();station.position.set(-17,0,9);p.add(station);sphere(station,0xd7d7e6,0,1.7,0,5,2.5,4);box(station,0x607293,0,1.5,3.3,2.4,2.6,.8,.5);sign(station,'导航欠费',0,3.6,2.6,6,'#dcd9ed','U.F.OOPS BASE');this.obstacles.push({x:-17,z:9,radius:5,object:station});
-   const mast=new THREE.Group();mast.position.set(18,0,-12);p.add(mast);cylinder(mast,0x8992b1,0,4,0,.3,8);const dish=mesh(new THREE.SphereGeometry(3,24,14,0,Math.PI*2,0,Math.PI/2),0xd4cbe3,mast,0,8,0);dish.rotation.z=-.7;dish.rotation.x=.45;dish.scale.y=.4;this.obstacles.push({x:18,z:-12,radius:2,object:mast});
+   const station=new THREE.Group();station.position.set(-17,0,9);p.add(station);sphere(station,0xd7d7e6,0,1.7,0,5,2.5,4);box(station,0x607293,0,1.5,3.3,2.4,2.6,.8,.5);sign(station,'导航欠费',0,3.6,2.6,6,'#dcd9ed','U.F.OOPS BASE');// The base is visual scenery and must not trap the player.
+   const mast=new THREE.Group();mast.position.set(18,0,-12);p.add(mast);cylinder(mast,0x8992b1,0,4,0,.3,8);const dish=mesh(new THREE.SphereGeometry(3,24,14,0,Math.PI*2,0,Math.PI/2),0xd4cbe3,mast,0,8,0);dish.rotation.z=-.7;dish.rotation.x=.45;dish.scale.y=.4;// The antenna is visual scenery.
   }
  }
  pencilProp(x:number,z:number,height:number){
@@ -115,10 +119,10 @@ export class World {
   this.obstacles.push({x,z,radius:1.3,object:g});
  }
  crater(x:number,z:number,r:number){
-  const g=new THREE.Group();g.position.set(x,.03,z);this.group.add(g);
+  const g=new THREE.Group();g.name='Lunar crater';g.position.set(x,.03,z);this.group.add(g);
   const rim=mesh(new THREE.TorusGeometry(r,r*.14,8,32),0x938dab,g);rim.rotation.x=Math.PI/2;rim.scale.z=.5;
   const inner=cylinder(g,0x777b98,0,.01,0,r*.88,.06,r*.88,32);inner.castShadow=false;
-  if(r>3)this.obstacles.push({x,z,radius:r*.9,object:g});
+  // Craters are decorative terrain. Placement keeps the entire rim off the road.
  }
  mergeStatic(){
   this.group.updateMatrixWorld(true);

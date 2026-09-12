@@ -1,4 +1,9 @@
+import {gameAudio} from './audio';
 import './launch.css';
+// Unlock within the user's gesture, before importing the 3D bundle.
+window.addEventListener('pointerdown',()=>void gameAudio.unlock(),{passive:true});
+window.addEventListener('keydown',()=>void gameAudio.unlock());
+void gameAudio.unlock();
 let game:Promise<typeof import('./main')>|undefined;
 const status=document.getElementById('landing-status')!;
 for(const button of document.querySelectorAll<HTMLButtonElement>('[data-entry]')){

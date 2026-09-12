@@ -1,3 +1,4 @@
+import {gameAudio} from './audio';
 import './style.css';
 import './online.css';
 import './launch.css';
@@ -11,7 +12,7 @@ import {Race,formatTime} from './race';
 import {samples,frameAt,nearestTrack,setTrack} from './track';
 import {Competition,type GameMode} from './competition';
 import {RivalVisual} from './rival-visual';
-import {KARTS,createKart,animateKart,kartThumbnails,type KartId,type KartModel} from './kart-models';
+import {KARTS,setCompleteFleet,createKart,animateKart,kartThumbnails,type KartId,type KartModel} from './kart-models';
 import {OnlineGame} from './online-game';
 import {TiltSteering} from './tilt-steering';
 
@@ -21,7 +22,7 @@ document.querySelector('#app')!.innerHTML=`
 <canvas id="scene" tabindex="0" aria-label="土豆环岛三维赛车场。使用方向键或 WASD 驾驶，空格漂移，Shift 加速。"></canvas>
 <div class="hud" id="hud">
  <header class="topbar"><div class="brand"><div class="brand-icon">W</div><div class="brand-name">歪瓜大奖赛<small>WOBBLE GP <span class="version-badge">01</span></small></div></div>
- <div class="toolbar"><span class="tag">单人练习 · SINGLE PLAYER</span><button id="sound" class="icon-btn" aria-label="开启声音" title="声音 · M">${svg('muted')}</button><button id="camera" class="icon-btn" aria-label="切换俯瞰镜头" title="切换镜头 · C">${svg('camera')}</button><button id="reset" class="icon-btn" aria-label="返回赛道" title="返回赛道 · R">${svg('reset')}</button><button id="help" class="icon-btn help-button" aria-label="操作说明" title="操作说明">${svg('help')}</button></div></header>
+ <div class="toolbar"><span class="tag">单人练习 · SINGLE PLAYER</span><button id="sound" class="icon-btn" aria-label="开启声音" title="声音 · M">${svg('muted')}</button><button id="camera" class="icon-btn" aria-label="切换侧后方跟随" title="切换镜头 · C">${svg('camera')}</button><button id="reset" class="icon-btn" aria-label="返回赛道" title="返回赛道 · R">${svg('reset')}</button><button id="help" class="icon-btn help-button" aria-label="操作说明" title="操作说明">${svg('help')}</button></div></header>
  <div class="stats"><div class="stat"><label>LAP / 圈数</label><strong id="lap">01 <small>/ 03</small></strong></div><div class="stat"><label>TIME / 用时</label><strong id="time">00:00.00</strong></div><div class="stat"><label>POTATO COINS</label><strong><i class="coin-icon">◉</i><span id="coins">00</span></strong></div></div>
  <section class="intro" id="intro"><div class="eyebrow"><span></span> SMALL CAR. BIG NONSENSE.</div><h1>正经赛车，<em>不太正经地开。</em></h1><p>欢迎来到土豆环岛。<br/>踩下油门，拐个歪弯，和路边的憨瓜打个招呼。<br/>这里只有你、风，以及一颗不服输的土豆。</p><button class="primary" id="start" disabled><span>正在把小车搬上岛…</span><b>↗</b></button><div class="intro-hint">3 圈小比赛 · 随时重来 · 不用驾照</div></section>
  <aside class="track-card"><span class="card-stamp">新手<br/>友好</span><div class="card-tag">TRACK 01 / THE FIRST LAP</div><h2>土豆环岛 🥔</h2><div class="card-meta"><span>晴，宜乱开</span><span>约 260 m</span><span>3 圈</span></div></aside>
@@ -73,11 +74,11 @@ modePicker.addEventListener('change',()=>{
  updateCar(0);updateHUD();
 });
 const car=new THREE.Group(),carBody=new THREE.Group();car.add(carBody);scene.add(car);const playerModels=new Map<KartId,KartModel>();let playerModel:KartModel|undefined;let selectedKart:KartId='potato';let thumbnails=new Map<KartId,string>();
-let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false,countdown=3,lastCountdown=-1,coins=0,elapsedVisual=0,cameraMode:'follow'|'overview'='follow',toastTimer=0,coinSoundCooldown=0,padCooldown=0,respawnCooldown=0,accumulator=0,previousFrame=performance.now(),hudTick=0;
+let loaded=false,mode:'intro'|'countdown'|'race'|'finished'='intro',paused=false,countdown=3,lastCountdown=-1,coins=0,elapsedVisual=0,cameraMode:'rear'|'side'='rear',toastTimer=0,coinSoundCooldown=0,padCooldown=0,respawnCooldown=0,accumulator=0,previousFrame=performance.now(),hudTick=0;
 let debugManual=false;
 const keys=new Set<string>(),touch=new Set<string>();
 const emptyInput:Control={throttle:0,steer:0,brake:false,boost:false};
-const mobileDevice=isMobileDevice();
+
 let gyroEnabled=false,steeringSetupOpen=false;
 const tilt=new TiltSteering();
 const gyroButton=$<HTMLButtonElement>('gyro-toggle');
@@ -125,13 +126,18 @@ online.net.input=()=>paused||document.hidden?emptyInput:controls();
 onlineButton.onclick=()=>flow.begin('online');
 function controls():Control{const brake=keys.has('Space')||touch.has('brake'),reverse=keys.has('KeyS')||keys.has('ArrowDown')||touch.has('reverse');const autoForward=isMobileDevice()&&mode==='race'&&!reverse&&!brake;return {throttle:reverse?-1:(keys.has('KeyW')||keys.has('ArrowUp')||touch.has('gas')||autoForward?1:0),steer:gyroEnabled?tilt.value(performance.now()):(keys.has('KeyD')||keys.has('ArrowRight')||touch.has('right')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')||touch.has('left')?1:0),brake,boost:keys.has('ShiftLeft')||keys.has('ShiftRight')||touch.has('boost')};}
 class Sound {
- context?:AudioContext;engine?:OscillatorNode;engineGain?:GainNode;muted=true;
- init(){if(this.context)return;this.context=new AudioContext();this.engine=this.context.createOscillator();this.engine.type='triangle';this.engineGain=this.context.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(this.context.destination);this.engine.start();}
- toggle(){this.init();this.muted=!this.muted;void this.context?.resume();$('sound').innerHTML=svg(this.muted?'muted':'sound');$('sound').setAttribute('aria-label',this.muted?'开启声音':'关闭声音');}
- tone(frequency:number,length=.12,type:OscillatorType='sine',volume=.08){if(this.muted||!this.context)return;const c=this.context,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(frequency,c.currentTime);g.gain.setValueAtTime(volume,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+length);o.connect(g).connect(c.destination);o.start();o.stop(c.currentTime+length);o.onended=()=>{o.disconnect();g.disconnect();};}
- update(){if(!this.context||!this.engine||!this.engineGain)return;this.engine.frequency.setTargetAtTime(42+Math.abs(vehicle.speed)*6+(vehicle.boosting?25:0),this.context.currentTime,.08);this.engineGain.gain.setTargetAtTime(!this.muted&&mode==='race'&&!paused?.018+Math.min(.012,Math.abs(vehicle.speed)*.0005):0,this.context.currentTime,.12);}
+ engine?:OscillatorNode;engineGain?:GainNode;
+ get context(){return gameAudio.context;}
+ get muted(){return gameAudio.muted;}
+ init(){void gameAudio.unlock();if(this.engine||!this.context)return;const c=this.context;this.engine=c.createOscillator();this.engine.type='triangle';this.engineGain=c.createGain();this.engineGain.gain.value=0;this.engine.connect(this.engineGain).connect(gameAudio.output!);this.engine.start();}
+ toggle(){gameAudio.toggle();}
+ tone(frequency:number,length=.12,type:OscillatorType='sine',volume=.08){if(this.muted||!this.context)return;const c=this.context,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.setValueAtTime(frequency,c.currentTime);g.gain.setValueAtTime(volume,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+length);o.connect(g).connect(gameAudio.output!);o.start();o.stop(c.currentTime+length);o.onended=()=>{o.disconnect();g.disconnect();};}
+ update(){gameAudio.setScene(mode==='race'||mode==='countdown'?'race':'menu');if(!this.engine&&this.context)this.init();if(!this.context||!this.engine||!this.engineGain)return;this.engine.frequency.setTargetAtTime(42+Math.abs(vehicle.speed)*6+(vehicle.boosting?25:0),this.context.currentTime,.08);this.engineGain.gain.setTargetAtTime(!this.muted&&mode==='race'&&!paused?.018+Math.min(.012,Math.abs(vehicle.speed)*.0005):0,this.context.currentTime,.12);}
 }
 const sound=new Sound();
+function soundLabel(){const b=$('sound');b.innerHTML=svg(sound.muted?'muted':'sound');b.setAttribute('aria-label',sound.muted?'开启音乐与音效':'关闭音乐与音效');b.title=sound.muted?'开启音乐与音效 · M':'关闭音乐与音效 · M';}
+window.addEventListener('wobble-audio-change',soundLabel);soundLabel();
+
 function toast(text:string,duration=2.5){$('toast').textContent=text;$('toast').classList.add('show');toastTimer=duration;}
 function selectKart(id:KartId){
  const spec=KARTS.find(k=>k.id===id);if(!spec||!playerModels.has(id))return;
@@ -149,7 +155,7 @@ garageButton.onclick=()=>openGarage();
 function beginRace(){if(!loaded)return;closeModal();flow.hide();car.visible=true;rivalVisuals.forEach(v=>v.rival.vehicle.speed=0);competition.reset(selectedGameMode);world.resetCoins();coins=0;mode='countdown';countdown=3;lastCountdown=-1;padCooldown=0;keys.clear();touch.clear();for(const s of skids)s.visible=false;for(const d of dust){d.life=0;d.mesh.visible=false;}$('intro').classList.add('hidden');$('intro').inert=true;$('hud').classList.remove('finished');$('hud').classList.add('playing');$('countdown').textContent='3';canvas.focus();toast(selectedGameMode==='race'?'四辆车，三圈路。土豆冠军只有一个！':'跟着箭头跑三圈。土豆评委已经就位。',3);updateHUD();}
 function startRace(){prepareSteering(beginRace);}
 function respawn(){if(online.active){online.net.send({type:'respawn'});keys.clear();touch.clear();return;}if(mode==='intro')return;vehicle.reset(race.respawnProgress());keys.clear();touch.clear();respawnCooldown=1;toast('稳住！把你捞回赛道了。');updateCar(0);}
-function toggleCamera(){cameraMode=cameraMode==='follow'?'overview':'follow';$('camera').setAttribute('aria-label',cameraMode==='follow'?'切换俯瞰镜头':'切换跟车镜头');toast(cameraMode==='follow'?'跟车镜头 · 贴着小车跑':'俯瞰镜头 · 看得更远');}
+function toggleCamera(){cameraMode=cameraMode==='rear'?'side':'rear';$('camera').setAttribute('aria-label',cameraMode==='rear'?'切换侧后方跟随':'切换正后方跟随');toast(cameraMode==='rear'?'正后方跟随 · 赛车视角':'侧后方跟随 · 看见漂移');}
 function closeModal(){$('modal').classList.remove('garage-modal','net-modal');paused=false;$('modal-backdrop').classList.remove('visible');keys.clear();touch.clear();canvas.focus();}
 function openModal(content:string){paused=true;keys.clear();touch.clear();$('modal').innerHTML=content;$('modal-backdrop').classList.add('visible');$('modal').querySelector<HTMLButtonElement>('button')?.focus();}
 function help(){openModal(`<small>DRIVER'S VERY SHORT MANUAL</small><h2 id="modal-title">小车上手指南</h2><p>先跑起来。漂不漂亮，土豆说了算。</p><div class="help-row"><span>加速 / 刹车与倒车</span><span><kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd> <kbd>↓</kbd></span></div><div class="help-row"><span>方向</span><span><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd></span></div><div class="help-row"><span>刹车 / 转弯时漂移</span><kbd>SPACE</kbd></div><div class="help-row"><span>氮气 / 回到检查点</span><span><kbd>SHIFT</kbd> / <kbd>R</kbd></span></div><div class="help-row"><span>镜头 / 声音 / 喇叭</span><span><kbd>C</kbd> <kbd>M</kbd> <kbd>H</kbd></span></div><p>黄色箭头会加速，跳台可以起飞。收集薯币补充氮气；草地会减速。顺序通过检查点才算一圈。</p><button class="primary" id="resume">知道了，继续开</button><button class="secondary" id="leave-race">结束本局，返回车库</button>`);$('resume').onclick=closeModal;$('leave-race').onclick=returnToGarage;}
@@ -228,12 +234,22 @@ function updateCar(dt:number){
 function updateCamera(dt:number){
  if(mode==='intro'){
   const mobile=innerWidth<760;desiredTarget.set(mobile?0:-12,0,mobile?4:1);desiredPosition.set(mobile?88:83,mobile?130:104,mobile?124:116);
- }else if(cameraMode==='overview'){
-  desiredTarget.set(vehicle.x,0,vehicle.z);desiredPosition.copy(desiredTarget).add(new THREE.Vector3(21,29,24));
  }else{
-  const f=new THREE.Vector3(Math.sin(vehicle.heading),0,Math.cos(vehicle.heading));const side=new THREE.Vector3(f.z,0,-f.x);desiredTarget.set(vehicle.x,vehicle.y+.7,vehicle.z).addScaledVector(f,3);desiredPosition.set(vehicle.x,vehicle.y,vehicle.z).addScaledVector(f,-15.5).addScaledVector(side,6.5);desiredPosition.y+=15.0;
-  if(mobileDevice){desiredTarget.set(vehicle.x,vehicle.y+1.0,vehicle.z).addScaledVector(f,3.4);desiredPosition.set(vehicle.x,vehicle.y,vehicle.z).addScaledVector(f,-13.8);desiredPosition.y+=8.5;}
+  const f=new THREE.Vector3(Math.sin(vehicle.heading),0,Math.cos(vehicle.heading));
+  const side=new THREE.Vector3(f.z,0,-f.x),rear=cameraMode==='rear';
+  desiredTarget.set(vehicle.x,vehicle.y+1,vehicle.z).addScaledVector(f,3.4);
+  desiredPosition.set(vehicle.x,vehicle.y,vehicle.z).addScaledVector(f,rear?-13.8:-15.5).addScaledVector(side,rear?0:6.5);
+  desiredPosition.y+=rear?8.5:15;
  }
+ // Keep rear mode centered on the car even through turns: smooth the orbit radius,
+ // not the world-space heading, which would leave the camera drifting sideways.
+ if(mode!=='intro'&&cameraMode==='rear'){
+  const blend=1-Math.exp(-dt*7);
+  const distance=THREE.MathUtils.lerp(Math.hypot(camera.position.x-vehicle.x,camera.position.z-vehicle.z),13.8,blend);
+  camera.position.set(vehicle.x-Math.sin(vehicle.heading)*distance,THREE.MathUtils.lerp(camera.position.y,desiredPosition.y,blend),vehicle.z-Math.cos(vehicle.heading)*distance);
+  cameraTarget.copy(desiredTarget);
+ }
+
  const lerp=1-Math.exp(-dt*(mode==='intro'?1.5:4));camera.position.lerp(desiredPosition,lerp);cameraTarget.lerp(desiredTarget,lerp);camera.lookAt(cameraTarget);const targetFov=mode==='intro'?42:innerWidth<760?(vehicle.boosting?66:60):(vehicle.boosting?52:46);camera.fov=THREE.MathUtils.damp(camera.fov,targetFov,4,dt);camera.updateProjectionMatrix();
 }
 const map=$<HTMLCanvasElement>('minimap'),ctx=map.getContext('2d')!;
@@ -248,7 +264,9 @@ function updateHUD(){
  if(selectedGameMode==='race'||online.active)for(const [i,rival] of competition.rivals.entries()){if(online.active&&(!online.remote[i]?.connected||online.remote[i]?.dnf))continue;ctx.fillStyle=rival.color;ctx.beginPath();ctx.arc(rival.vehicle.x*2.5+150,rival.vehicle.z*2.5+114,4.8,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fff9e9';ctx.lineWidth=1.5;ctx.stroke();}
 }
 const modelTimeout=setTimeout(()=>{if(!loaded)readyReject(Error('模型请求超时，请重试'));},20000);
-new GLTFLoader().load(`${import.meta.env?.BASE_URL||'/'}assets/apex-07.glb`,gltf=>{
+const modelLoader=new GLTFLoader(),assetBase=`${import.meta.env?.BASE_URL||'/'}assets/`;
+modelLoader.loadAsync(assetBase+'fleet-final.glb').then(gltf=>{
+ setCompleteFleet(gltf.scene);
  clearTimeout(modelTimeout);
  // Apply shared depth settings before cloning materials for opponent liveries.
  gltf.scene.traverse(o=>{if(o instanceof THREE.Mesh){o.castShadow=true;o.receiveShadow=false;if(o.name.startsWith('Livery_')){o.renderOrder=2;for(const m of(Array.isArray(o.material)?o.material:[o.material])){m.polygonOffset=true;m.polygonOffsetFactor=-2;m.polygonOffsetUnits=-2;}}}});
@@ -258,13 +276,13 @@ new GLTFLoader().load(`${import.meta.env?.BASE_URL||'/'}assets/apex-07.glb`,gltf
  try{const saved=localStorage.getItem('wobble-gp:kart');if(KARTS.some(k=>k.id===saved))selectedKart=saved as KartId;}catch{}
  selectKart(selectedKart);loaded=true;garageButton.disabled=false;onlineButton.disabled=false;$('start').removeAttribute('disabled');$('start').querySelector('span')!.textContent='出发，歪一下';$('loading').classList.add('hidden');updateCar(0);readyResolve();
 
-},undefined,error=>{clearTimeout(modelTimeout);$('loading').innerHTML='小车没有加载成功。<button id="retry">重新加载</button>';$('retry').onclick=()=>location.reload();console.error('Car model loading failed',error);readyReject(error);});
+}).catch(error=>{clearTimeout(modelTimeout);$('loading').innerHTML='小车没有加载成功。<button id="retry">重新加载</button>';$('retry').onclick=()=>location.reload();console.error('Car model loading failed',error);readyReject(error);});
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(renderPixelRatio());});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;$('loading').classList.remove('hidden');$('loading').textContent='画面连接暂时丢失，请刷新页面重新启动。';});
 // Only exposed in development: deterministic gameplay checks without a permanent autopilot.
 if(import.meta.env?.DEV){(window as unknown as {__game:unknown}).__game={vehicle,race,world,get mode(){return mode;},get paused(){return paused;},get loaded(){return loaded;},get coins(){return coins;},get stats(){return {calls:renderer.info.render.calls,triangles:renderer.info.render.triangles};},start:startRace,respawn,controls,manual:(enabled:boolean)=>{debugManual=enabled;},advance:(seconds:number,input=emptyInput)=>{for(let i=0;i<Math.round(seconds*60);i++)step(1/60,input);updateCar(paused?0:seconds);updateHUD();},place:(t:number)=>{const f=frameAt(t);vehicle.x=f.position.x;vehicle.z=f.position.z;vehicle.heading=f.heading;vehicle.y=.13;},frameAt};}
 if(import.meta.env.DEV){const debug=(window as unknown as {__game:object}).__game;Object.assign(debug,{competition,playerModels,selectKart,openGarage,selectMode:(value:GameMode)=>{selectedGameMode=value;competition.reset(value);},help,closeModal,finish});Object.defineProperty(debug,'selectedKart',{get:()=>selectedKart});}
-function loop(now:number){requestAnimationFrame(loop);const delta=Math.min((now-previousFrame)/1000,.06);previousFrame=now;if(document.hidden)return;if(flow.frame(delta)){accumulator=0;sound.update();return;}if(!debugManual){accumulator+=delta;let steps=0;while(accumulator>=1/60&&steps<4){step(1/60);accumulator-=1/60;steps++;}}updateCar(paused?0:delta);updateCamera(delta);world.updateGantryVisibility(camera,car.position.clone().add(new THREE.Vector3(0,.7,0)),mode!=='intro'&&cameraMode==='follow');sound.update();hudTick+=delta;if(hudTick>.06){updateHUD();hudTick=0;}renderer.render(scene,camera);}
+function loop(now:number){requestAnimationFrame(loop);const delta=Math.min((now-previousFrame)/1000,.06);previousFrame=now;if(document.hidden)return;if(flow.frame(delta)){accumulator=0;sound.update();return;}if(!debugManual){accumulator+=delta;let steps=0;while(accumulator>=1/60&&steps<4){step(1/60);accumulator-=1/60;steps++;}}updateCar(paused?0:delta);updateCamera(delta);world.updateGantryVisibility(camera,car.position.clone().add(new THREE.Vector3(0,.7,0)),mode!=='intro');sound.update();hudTick+=delta;if(hudTick>.06){updateHUD();hudTick=0;}renderer.render(scene,camera);}
 flow=new LaunchFlow({renderer,scene,models:()=>playerModels,thumbnails:()=>thumbnails,selected:()=>selectedKart,select:selectKart,track:()=>chosenTrack,selectTrack,
  previewWorld:(id)=>{const previous=chosenTrack;setTrack(id);if(!worlds.has(id)){const w=new World(scene);w.group.visible=false;worlds.set(id,w);}const preview=worlds.get(id)!.group.clone(true);preview.visible=true;preview.getObjectByName('Ocean')?.removeFromParent();setTrack(previous);return preview;},
  reset:()=>{closeModal();mode='intro';keys.clear();touch.clear();competition.reset(selectedGameMode);$('hud').classList.remove('playing','finished');$('countdown').textContent='';resultsSignature='';for(const skid of skids)skid.visible=false;},

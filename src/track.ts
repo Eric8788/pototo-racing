@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {trackSpec,type TrackId} from './tracks';
 
-export const TRACK_WIDTH = 10.5;
+export const TRACK_WIDTH = 11.5;
 let activeTrack:TrackId='potato';
 export const getTrack=()=>activeTrack;
 const buildCurve=(id:TrackId)=>new THREE.CatmullRomCurve3(trackSpec(id).points.map(([x,z])=>new THREE.Vector3(x,0,z)),true,'centripetal');

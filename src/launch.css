@@ -6,3 +6,5 @@ body[data-screen=home] #app,body[data-screen=home] #loading{visibility:hidden}bo
 @media(prefers-reduced-motion:reduce){#landing button[data-entry],.kart-tabs button{transition:none}}
 
 .landing-mobile-brand{display:none}@media(max-width:760px) and (min-height:561px){.landing-mobile-brand{display:block;position:absolute;left:24px;top:9%;font-size:36px;font-weight:900;text-shadow:0 2px 15px #fff9e9;line-height:1.3}.landing-mobile-brand small{display:block;font-size:14px;letter-spacing:5px}}
+
+.setup-tools{display:flex;gap:8px;align-items:center}#setup-audio{font-size:12px;white-space:nowrap}@media(max-width:760px){#setup-audio{padding:8px;font-size:10px}.setup-header nav{gap:7px}}

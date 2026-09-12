@@ -1,5 +1,7 @@
+import {gameAudio} from './audio';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {KARTS,animateShowroom,type KartId,type KartModel} from './kart-models';
 import {TRACKS,trackSpec,type TrackId} from './tracks';
 import {trackLength} from './track';
@@ -23,8 +25,13 @@ export class LaunchFlow {
  private orbitScene=new THREE.Scene();private orbit=new THREE.Group();private planets:THREE.Group[]=[];
  private showroomTime=0;private orbitAngle=0;private fromAngle=0;private targetAngle=0;private viewAngle=.65;private spin=0;private rotateResume=0;
  constructor(private o:Options){
+  this.ui.addEventListener('click',e=>{if((e.target as HTMLElement).closest('#setup-audio')){gameAudio.toggle();this.audioLabel();}});
+  window.addEventListener('wobble-audio-change',()=>this.audioLabel());
   this.ui.id='setup-ui';this.ui.hidden=true;document.body.append(this.ui);
   this.garage.background=new THREE.Color(0xe1e6d9);this.garage.fog=new THREE.Fog(0xe1e6d9,18,42);
+  const studio=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(this.o.renderer);
+  this.garage.environment=pmrem.fromScene(studio,.04).texture;this.garage.environmentIntensity=.45;
+  studio.dispose();pmrem.dispose();
   this.garage.add(new THREE.HemisphereLight(0xfff9e5,0x668c83,3));
   const light=new THREE.DirectionalLight(0xffe8c9,3.2);light.position.set(-4,9,6);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-5,right:5,top:5,bottom:-5,near:.1,far:25});light.shadow.normalBias=.025;light.shadow.bias=-.0001;this.garage.add(light);
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:0xe1e6d9,roughness:1}));ground.receiveShadow=true;ground.rotation.x=-Math.PI/2;ground.position.y=-.21;this.garage.add(ground);
@@ -44,7 +51,8 @@ export class LaunchFlow {
  home(){this.controls?.dispose();this.controls=undefined;this.stage='home';this.ui.hidden=true;this.o.reset();el('landing').hidden=false;document.body.dataset.screen='home';el('entry-single').focus();}
  hide(screen='race'){this.controls?.dispose();this.controls=undefined;this.stage='hidden';this.ui.hidden=true;el('landing').hidden=true;document.body.dataset.screen=screen;}
  begin(mode:EntryMode){this.entry=mode;this.o.reset();this.showGarage();}
- private header(step:number){return `<header class="setup-header"><button id="setup-back" class="setup-back" aria-label="返回上一步">← <span>返回</span></button><nav aria-label="开局步骤"><span>01 模式</span><b class="${step===2?'current':''}">02 选车</b><b class="${step===3?'current':''}">03 地图</b></nav><span class="setup-mode">${this.entry==='single'?'单人游戏':'多人联机'}</span></header>`;}
+ private audioLabel(){const b=this.ui.querySelector('#setup-audio');if(b){b.textContent=gameAudio.muted?'♫ 已静音':'♫ 音乐开';b.setAttribute('aria-pressed',String(!gameAudio.muted));}}
+ private header(step:number){return `<header class="setup-header"><button id="setup-back" class="setup-back" aria-label="返回上一步">← <span>返回</span></button><nav aria-label="开局步骤"><span>01 模式</span><b class="${step===2?'current':''}">02 选车</b><b class="${step===3?'current':''}">03 地图</b></nav><div class="setup-tools"><button id="setup-audio" class="setup-back" aria-label="音乐与音效" aria-pressed="${!gameAudio.muted}">${gameAudio.muted?'♫ 已静音':'♫ 音乐开'}</button><span class="setup-mode">${this.entry==='single'?'单人游戏':'多人联机'}</span></div></header>`;}
  showGarage(){
   this.controls?.dispose();this.controls=undefined;this.stage='garage';this.moving=0;el('landing').hidden=true;this.ui.hidden=false;document.body.dataset.screen='garage';
   this.ui.innerHTML=`${this.header(2)}<div class="setup-copy"><small>THE ODD GARAGE</small><h1>你的怪车库。</h1><div class="kart-details"><span id="garage-number"></span><h2 id="garage-name"></h2><p id="garage-tagline"></p><small>四款怪车 · 一样认真地跑</small></div></div><div id="model-drag" tabindex="0" role="img" aria-label="三维车辆预览，拖动旋转，双指缩放"><span class="rotate-hint">↔ 拨动小车 · 松手后自动环绕</span></div><div class="orbit-buttons"><button id="orbit-left" aria-label="向左旋转模型">↶</button><button id="orbit-right" aria-label="向右旋转模型">↷</button><button id="orbit-reset">重置视角</button></div><footer class="setup-footer"><div class="kart-tabs" role="group" aria-label="选择车辆">${KARTS.map((k,i)=>`<button data-choice="${k.id}" aria-pressed="false"><span>0${i+1}</span><img alt="" src="${this.o.thumbnails().get(k.id)||''}"><b>${k.name}</b></button>`).join('')}</div><button id="garage-next" class="setup-primary">就开这辆，选地图 <b>→</b></button></footer>`;
@@ -96,7 +104,8 @@ export class LaunchFlow {
   }
   this.orbit.rotation.y=this.orbitAngle;
   this.planets.forEach((slot,i)=>{const a=i*Math.PI*2/TRACKS.length+this.orbitAngle;slot.visible=Math.cos(a)>-.1;slot.children[0].rotation.y=this.spin-this.orbitAngle;});
-  const aspect=innerWidth/innerHeight,zoom=aspect<1?1.95:1;
+  const aspect=innerWidth/innerHeight,shortLandscape=aspect>1.3&&innerHeight<520,zoom=aspect<1?1.95:shortLandscape?1.12:1;
+  if(shortLandscape)this.mapCamera.setViewOffset(innerWidth,innerHeight,0,innerHeight*.08,innerWidth,innerHeight);else this.mapCamera.clearViewOffset();
   this.mapCamera.aspect=aspect;this.mapCamera.far=900;this.mapCamera.updateProjectionMatrix();
   // Orbit near the original three-quarter view, keeping the island and its depth in view.
   const angle=.65+Math.sin(this.viewAngle-.65)*.18;
