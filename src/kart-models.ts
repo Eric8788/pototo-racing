@@ -74,7 +74,11 @@ export function createKart(id:KartId,apex:THREE.Object3D):KartModel{
  const model:KartModel={id,root,wheels:[],steers:[],phase:0};
  const authored=completeFleet?.getObjectByName('Fleet_'+id);
  if(authored){
-  const assembly=authored.clone(true);root.add(assembly);root.userData.modelVersion='blender-poster-v5';
+  const assembly=authored.clone(true);
+  // Normalize authored Blender offsets for the driving scene as well as garage previews.
+  const bounds=new THREE.Box3().setFromObject(assembly),center=bounds.getCenter(new THREE.Vector3());
+  assembly.position.x-=center.x;assembly.position.z-=center.z;
+  root.add(assembly);root.userData.modelVersion='blender-poster-v5';
   assembly.traverse(o=>{
    if(o.name.includes('__Wheel_'))model.wheels.push(o);
    if(o.name.includes('__Steer_F'))model.steers.push(o);
